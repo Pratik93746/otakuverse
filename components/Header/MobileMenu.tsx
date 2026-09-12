@@ -16,6 +16,8 @@ import {
 } from 'lucide-react';
 import { useSession, signOut } from 'next-auth/react';
 import toast from 'react-hot-toast';
+import { useCartStore } from '@/store/cart';
+import { signOutFirebase } from '@/lib/firebase';
 
 const navLinks = [
   { label: 'Shop All', href: '/shop', description: 'Browse all figures' },
@@ -38,7 +40,13 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
   const handleSignOut = async () => {
     onClose();
     toast.success('Signed out successfully 👋');
-    await signOut({ callbackUrl: '/' });
+    try {
+      useCartStore.getState().clearCart(true);
+      await signOutFirebase();
+    } catch {
+      // ignore
+    }
+    await signOut({ callbackUrl: '/login' });
   };
 
   return (

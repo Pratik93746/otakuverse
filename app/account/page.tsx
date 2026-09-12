@@ -4,8 +4,9 @@ import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { getUserFirestoreOrders, getFirestoreAddresses } from '@/lib/firestore';
 import Link from 'next/link';
-import { Package, User, Heart, LogOut, ShieldCheck } from 'lucide-react';
+import { Package, User, Heart, ShieldCheck } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
+import { AccountSignOutButton } from '@/components/Account/AccountSignOutButton';
 
 export default async function AccountPage() {
   const session = await getServerSession(authOptions);
@@ -120,9 +121,7 @@ export default async function AccountPage() {
             <Link href="/wishlist" className="btn-ghost border border-gray-200 text-xs py-2 px-4 flex items-center gap-1.5">
               <Heart className="w-3.5 h-3.5 text-brand-red" /> Wishlist
             </Link>
-            <Link href="/api/auth/signout" className="btn-ghost border border-gray-200 text-xs py-2 px-4 flex items-center gap-1.5 text-red-600 hover:bg-red-50">
-              <LogOut className="w-3.5 h-3.5" /> Sign Out
-            </Link>
+            <AccountSignOutButton />
           </div>
         </div>
 

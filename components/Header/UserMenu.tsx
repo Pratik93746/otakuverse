@@ -17,6 +17,8 @@ import {
   Compass,
 } from 'lucide-react';
 import toast from 'react-hot-toast';
+import { useCartStore } from '@/store/cart';
+import { signOutFirebase } from '@/lib/firebase';
 
 export function UserMenu() {
   const { data: session, status } = useSession();
@@ -37,7 +39,13 @@ export function UserMenu() {
   const handleSignOut = async () => {
     setIsOpen(false);
     toast.success('Signed out successfully. See you soon, Hunter! 👋');
-    await signOut({ callbackUrl: '/' });
+    try {
+      useCartStore.getState().clearCart(true);
+      await signOutFirebase();
+    } catch {
+      // ignore
+    }
+    await signOut({ callbackUrl: '/login' });
   };
 
   // If loading session state, display placeholder

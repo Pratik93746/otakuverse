@@ -109,7 +109,7 @@ export const authOptions: NextAuthOptions = {
   },
   pages: {
     signIn: '/login',
-    signOut: '/',
+    signOut: '/login',
     error: '/login',
   },
   secret: process.env.NEXTAUTH_SECRET ?? 'otakuverse-secret-key-32-chars-minimum',
