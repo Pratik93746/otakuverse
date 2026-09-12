@@ -58,7 +58,7 @@ const indianStates = [
 
 export default function CheckoutPage() {
   const [mounted, setMounted] = useState(false);
-  const { data: session } = useSession();
+  const { data: session, status } = useSession();
   const { items, getSubtotal, clearCart } = useCartStore();
   const router = useRouter();
   const [step, setStep] = useState(0);
@@ -102,10 +102,24 @@ export default function CheckoutPage() {
   const total = subtotal + shippingCost + tax - discount;
 
   useEffect(() => {
-    if (mounted && items.length === 0 && step !== 4) {
+    if (mounted && status === 'unauthenticated') {
+      toast.error('Please sign in to complete your checkout!', {
+        icon: '🔐',
+        style: {
+          borderLeft: '4px solid #E63329',
+          background: '#12111A',
+          color: '#FFFFFF',
+        },
+      });
+      router.push('/login?callbackUrl=/checkout');
+    }
+  }, [mounted, status, router]);
+
+  useEffect(() => {
+    if (mounted && items.length === 0 && step !== 4 && status === 'authenticated') {
       router.push('/cart');
     }
-  }, [mounted, items.length, router, step]);
+  }, [mounted, items.length, router, step, status]);
 
   useEffect(() => {
     if (session?.user?.email) {

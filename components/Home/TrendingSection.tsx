@@ -8,6 +8,7 @@ import { Card3DTilt } from '@/components/UI/Card3DTilt';
 import { formatPrice } from '@/lib/utils';
 import { useCartStore } from '@/store/cart';
 import toast from 'react-hot-toast';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 
 const trendingCards = [
   {
@@ -69,9 +70,12 @@ const trendingCards = [
 export function TrendingSection() {
   const [selectedIdx, setSelectedIdx] = useState(0);
   const addItem = useCartStore((s) => s.addItem);
+  const { requireAuth } = useRequireAuth();
   const activeItem = trendingCards[selectedIdx];
 
   const handleQuickAdd = (item: typeof activeItem) => {
+    if (!requireAuth(undefined, '/shop')) return;
+
     addItem({
       id: item.id,
       productId: item.id,

@@ -14,6 +14,7 @@ import { ProductCard } from '@/components/ProductCard/ProductCard';
 import Model3DViewer from '@/components/Product/Model3DViewer';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 
 // Types
 interface ProductImage { id: string; url: string; alt?: string | null; isMain: boolean; sortOrder: number; }
@@ -69,6 +70,7 @@ export function ProductPageClient({ product, related }: ProductPageClientProps) 
   const [activeTab, setActiveTab] = useState('Description');
   const [viewerMode, setViewerMode] = useState<'gallery' | '360' | '3d'>('gallery');
   const router = useRouter();
+  const { requireAuth } = useRequireAuth();
 
   const addItem = useCartStore((s) => s.addItem);
   const openCart = useCartStore((s) => s.openCart);
@@ -83,6 +85,8 @@ export function ProductPageClient({ product, related }: ProductPageClientProps) 
 
   const handleAddToCart = () => {
     if (isSoldOut) return;
+    if (!requireAuth(undefined, `/product/${product.slug}`)) return;
+
     addItem({
       id: product.id,
       productId: product.id,
@@ -110,6 +114,9 @@ export function ProductPageClient({ product, related }: ProductPageClientProps) 
   };
 
   const handleBuyNow = () => {
+    if (isSoldOut) return;
+    if (!requireAuth(undefined, '/checkout')) return;
+
     handleAddToCart();
     router.push('/checkout');
   };

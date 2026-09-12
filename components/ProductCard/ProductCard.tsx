@@ -9,6 +9,7 @@ import { useCartStore } from '@/store/cart';
 import { useWishlistStore } from '@/store/wishlist';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 
 export interface ProductCardData {
   id: string;
@@ -46,6 +47,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
   }, []);
 
   const addItem = useCartStore((s) => s.addItem);
+  const { requireAuth } = useRequireAuth();
   const { toggleItem, isWishlisted } = useWishlistStore();
   const wishlisted = mounted && isWishlisted(product.id);
   const discount = calculateDiscount(product.price, product.compareAtPrice ?? 0);
@@ -55,6 +57,8 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
     e.preventDefault();
     e.stopPropagation();
     if (isSoldOut) return;
+    if (!requireAuth()) return;
+
     addItem({
       id: product.id,
       productId: product.id,
@@ -72,6 +76,8 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
   };
 
   const handleQuickBuy = () => {
+    if (!requireAuth(undefined, '/checkout')) return;
+
     addItem({
       id: product.id,
       productId: product.id,

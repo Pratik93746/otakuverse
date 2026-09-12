@@ -7,6 +7,7 @@ import { ArrowRight, Sparkles, Shield, Flame, Crown, ChevronLeft, ChevronRight, 
 import { formatPrice } from '@/lib/utils';
 import { useCartStore } from '@/store/cart';
 import toast from 'react-hot-toast';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 
 const heroSlides = [
   {
@@ -81,6 +82,7 @@ export function HeroSection() {
   const [current, setCurrent] = useState(0);
   const [isPaused, setIsPaused] = useState(false);
   const addItem = useCartStore((s) => s.addItem);
+  const { requireAuth } = useRequireAuth();
 
   useEffect(() => {
     if (isPaused) return;
@@ -95,6 +97,8 @@ export function HeroSection() {
 
   const handleCartAdd = (item: typeof slide) => {
     if (!item.productId) return;
+    if (!requireAuth(undefined, '/shop')) return;
+
     addItem({
       id: item.productId,
       productId: item.productId,

@@ -6,10 +6,21 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { useCartStore } from '@/store/cart';
 import { formatPrice } from '@/lib/utils';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 
 export function CartDrawer() {
   const { isOpen, items, closeCart, removeItem, updateQuantity, getSubtotal } = useCartStore();
+  const { requireAuth } = useRequireAuth();
   const subtotal = getSubtotal();
+
+  const handleCheckout = (e: React.MouseEvent) => {
+    if (!requireAuth(undefined, '/checkout')) {
+      e.preventDefault();
+      closeCart();
+    } else {
+      closeCart();
+    }
+  };
 
   return (
     <AnimatePresence>
@@ -178,7 +189,7 @@ export function CartDrawer() {
                 <div className="space-y-2">
                   <Link
                     href="/checkout"
-                    onClick={closeCart}
+                    onClick={handleCheckout}
                     className="btn-primary w-full justify-center text-base py-4"
                   >
                     Checkout

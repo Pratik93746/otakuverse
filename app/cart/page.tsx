@@ -6,9 +6,11 @@ import Image from 'next/image';
 import { Minus, Plus, Trash2, ShoppingBag, ArrowRight, ArrowLeft } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 
 export default function CartPage() {
   const { items, removeItem, updateQuantity, getSubtotal } = useCartStore();
+  const { requireAuth } = useRequireAuth();
   const subtotal = getSubtotal();
   const shipping = subtotal > 999 ? 0 : 79;
   const tax = Math.round(subtotal * 0.18);
@@ -134,7 +136,15 @@ export default function CartPage() {
                 </div>
               </div>
 
-              <Link href="/checkout" className="btn-primary w-full justify-center py-4 text-base">
+              <Link
+                href="/checkout"
+                onClick={(e) => {
+                  if (!requireAuth(undefined, '/checkout')) {
+                    e.preventDefault();
+                  }
+                }}
+                className="btn-primary w-full justify-center py-4 text-base"
+              >
                 PROCEED TO CHECKOUT
                 <ArrowRight className="w-4 h-4" />
               </Link>

@@ -7,6 +7,7 @@ import { Card3DTilt } from '@/components/UI/Card3DTilt';
 import { formatPrice } from '@/lib/utils';
 import { useCartStore } from '@/store/cart';
 import toast from 'react-hot-toast';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 
 const gamingSpotlight = {
   id: 'game-sekiro-1',
@@ -80,8 +81,11 @@ const otherGamingItems = [
 export function GamingSection() {
   const [activeGenre, setActiveGenre] = useState('all');
   const addItem = useCartStore((s) => s.addItem);
+  const { requireAuth } = useRequireAuth();
 
   const handleAddSekiro = () => {
+    if (!requireAuth(undefined, '/shop')) return;
+
     addItem({
       id: gamingSpotlight.id,
       productId: gamingSpotlight.id,
@@ -99,6 +103,8 @@ export function GamingSection() {
   };
 
   const handleAddSmall = (item: (typeof otherGamingItems)[0]) => {
+    if (!requireAuth(undefined, '/shop')) return;
+
     addItem({
       id: item.id,
       productId: item.id,

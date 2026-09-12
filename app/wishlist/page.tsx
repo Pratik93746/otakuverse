@@ -8,13 +8,17 @@ import { Heart, ShoppingBag, X, ArrowRight } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
+import { useRequireAuth } from '@/lib/useRequireAuth';
 
 export default function WishlistPage() {
   const { items, removeItem } = useWishlistStore();
   const addCartItem = useCartStore((s) => s.addItem);
   const openCart = useCartStore((s) => s.openCart);
+  const { requireAuth } = useRequireAuth();
 
   const handleMoveToCart = (item: typeof items[0]) => {
+    if (!requireAuth(undefined, '/wishlist')) return;
+
     addCartItem({
       id: item.productId,
       productId: item.productId,
