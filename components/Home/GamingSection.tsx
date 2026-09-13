@@ -257,18 +257,18 @@ export function GamingSection() {
             </div>
 
             {/* Big Action Bar */}
-            <div className="flex flex-wrap items-center gap-3 pt-2">
+            <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
               <button
                 onClick={handleAddSekiro}
-                className="bg-amber-500 hover:bg-amber-400 text-black py-3.5 sm:py-4 px-6 sm:px-8 text-xs sm:text-sm font-black uppercase tracking-widest flex items-center gap-2 shadow-xl shadow-amber-500/30 transition-all hover:scale-105 rounded-md cursor-pointer"
+                className="bg-amber-500 hover:bg-amber-400 text-black py-3.5 sm:py-4 px-4 sm:px-8 text-xs sm:text-sm font-black uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl shadow-amber-500/30 transition-all hover:scale-105 rounded-md cursor-pointer w-full sm:w-auto"
               >
-                <ShoppingBag className="w-4 h-4" /> CLAIM SEKIRO DROP • {formatPrice(gamingSpotlight.price)}
+                <ShoppingBag className="w-4 h-4 shrink-0" /> CLAIM SEKIRO DROP • {formatPrice(gamingSpotlight.price)}
               </button>
               <Link
                 href="/shop?category=gaming"
-                className="btn-secondary py-3.5 sm:py-4 px-5 sm:px-6 text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center gap-1.5 rounded-md"
+                className="btn-secondary py-3.5 sm:py-4 px-4 sm:px-6 text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 rounded-md w-full sm:w-auto"
               >
-                <Gamepad2 className="w-4 h-4" /> BROWSE ALL GAMING
+                <Gamepad2 className="w-4 h-4 shrink-0" /> BROWSE ALL GAMING
               </Link>
             </div>
           </div>

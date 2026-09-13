@@ -50,7 +50,7 @@ export function PromoBanner() {
 
         <Link
           href="/shop?filter=new"
-          className="btn-primary py-2.5 px-5 text-xs tracking-widest uppercase flex items-center gap-2 shadow-lg whitespace-nowrap flex-shrink-0 rounded-md"
+          className="btn-primary py-2.5 px-5 text-xs tracking-widest uppercase flex items-center justify-center gap-2 shadow-lg w-full sm:w-auto flex-shrink-0 rounded-md"
         >
           CLAIM YOUR DROP <ArrowRight className="w-3.5 h-3.5" />
         </Link>

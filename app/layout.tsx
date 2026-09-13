@@ -1,4 +1,4 @@
-import type { Metadata } from 'next';
+import type { Metadata, Viewport } from 'next';
 import { Inter, Bebas_Neue } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/Providers';
@@ -6,6 +6,12 @@ import { Header } from '@/components/Header/Header';
 import { Footer } from '@/components/Footer/Footer';
 import { CartDrawer } from '@/components/Cart/CartDrawer';
 import { Toaster } from 'react-hot-toast';
+
+export const viewport: Viewport = {
+  width: 'device-width',
+  initialScale: 1,
+  maximumScale: 1,
+};
 
 const inter = Inter({
   subsets: ['latin'],

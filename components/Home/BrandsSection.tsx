@@ -38,17 +38,17 @@ export async function BrandsSection() {
           <div className="h-0.5 w-16 bg-brand-red mx-auto mt-3" />
         </div>
 
-        <div className="grid grid-cols-4 md:grid-cols-8 gap-3 md:gap-4">
+        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-8 gap-2.5 sm:gap-3 md:gap-4">
           {displayBrands.map((brand) => (
             <Link
               key={brand.slug}
               href={`/shop?brand=${brand.slug}`}
-              className="flex flex-col items-center gap-2.5 p-4 rounded-xl border border-white/[0.06] bg-white/[0.03] hover:border-brand-red/50 hover:bg-white/[0.06] transition-all duration-300 group"
+              className="flex flex-col items-center gap-2 p-3 sm:p-4 rounded-xl border border-white/[0.06] bg-white/[0.03] hover:border-brand-red/50 hover:bg-white/[0.06] transition-all duration-300 group min-w-0"
             >
-              <span className="text-3xl group-hover:scale-125 transition-transform duration-300">
+              <span className="text-2xl sm:text-3xl group-hover:scale-125 transition-transform duration-300">
                 {'emoji' in brand ? brand.emoji : '🏷️'}
               </span>
-              <p className="text-[10px] font-semibold tracking-wider uppercase text-gray-400 group-hover:text-white transition-colors text-center leading-tight">
+              <p className="text-[10px] sm:text-xs font-semibold tracking-wider uppercase text-gray-400 group-hover:text-white transition-colors text-center leading-tight truncate w-full">
                 {brand.name}
               </p>
             </Link>

@@ -143,8 +143,8 @@ export function HeroSection() {
       />
 
       {/* Main Two-Column Stage */}
-      <div className="container-wide relative z-20 w-full px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col-reverse md:flex-row items-center md:items-center justify-between w-full gap-8 lg:gap-14">
+      <div className="container-wide relative z-20 w-full">
+        <div className="flex flex-col-reverse md:flex-row items-center justify-between w-full gap-8 lg:gap-14">
 
           {/* ============================================================
               LEFT COLUMN: Animated Typography & Action Controls
@@ -161,10 +161,10 @@ export function HeroSection() {
                 className="flex flex-col"
               >
                 {/* 1. Badge Row */}
-                <div className="h-9 flex items-center mb-3 sm:mb-4">
-                  <div className="inline-flex items-center gap-2.5">
+                <div className="min-h-9 flex items-center mb-3 sm:mb-4">
+                  <div className="inline-flex flex-wrap items-center gap-2 sm:gap-2.5">
                     <span className={`inline-flex items-center gap-2 px-3 py-1.5 ${slide.badgeColor} text-[11px] sm:text-xs font-black tracking-[0.2em] uppercase shadow-lg rounded-md`}>
-                      <BadgeIcon className="w-3.5 h-3.5" />
+                      <BadgeIcon className="w-3.5 h-3.5 shrink-0" />
                       {slide.badge}
                     </span>
                     {slide.discount && (
@@ -176,8 +176,8 @@ export function HeroSection() {
                 </div>
 
                 {/* 2. Big Headline */}
-                <div className="min-h-[90px] sm:min-h-[110px] md:min-h-[130px] flex items-center">
-                  <h1 className="font-heading text-4xl sm:text-6xl lg:text-7xl xl:text-8xl tracking-wider uppercase leading-[0.92] text-white font-black">
+                <div className="min-h-[70px] sm:min-h-[110px] md:min-h-[130px] flex items-center">
+                  <h1 className="font-heading text-3xl sm:text-5xl md:text-6xl lg:text-7xl xl:text-8xl tracking-wider uppercase leading-[0.92] text-white font-black break-words">
                     <span className="block drop-shadow-md">{slide.titleLine1}</span>
                     <span
                       className="block text-transparent bg-clip-text"
@@ -201,10 +201,10 @@ export function HeroSection() {
                 </div>
 
                 {/* 4. Price Row */}
-                <div className="h-12 flex items-center mt-3 sm:mt-4">
+                <div className="min-h-12 h-auto flex flex-wrap items-center mt-3 sm:mt-4 gap-2">
                   {slide.price ? (
-                    <div className="flex items-baseline gap-3.5">
-                      <span className="text-3xl sm:text-4xl font-black text-white font-heading tracking-wide">
+                    <div className="flex items-baseline flex-wrap gap-2.5 sm:gap-3.5">
+                      <span className="text-2xl sm:text-4xl font-black text-white font-heading tracking-wide">
                         {formatPrice(slide.price)}
                       </span>
                       {slide.compareAtPrice && (
@@ -217,8 +217,8 @@ export function HeroSection() {
                       </span>
                     </div>
                   ) : (
-                    <span className="text-xs sm:text-sm font-bold uppercase tracking-widest text-gray-400 flex items-center gap-2">
-                      <Sparkles className="w-3.5 h-3.5 text-yellow-400" /> OFFICIAL 100% JAPAN IMPORT • AUTHENTIC LICENSED
+                    <span className="text-[11px] sm:text-xs font-bold uppercase tracking-wider text-gray-400 flex flex-wrap items-center gap-1.5">
+                      <Sparkles className="w-3.5 h-3.5 text-yellow-400 shrink-0" /> OFFICIAL 100% JAPAN IMPORT • AUTHENTIC LICENSED
                     </span>
                   )}
                 </div>
@@ -228,32 +228,32 @@ export function HeroSection() {
                   {slide.primaryIsCart ? (
                     <button
                       onClick={() => handleCartAdd(slide)}
-                      className="btn-primary py-3.5 sm:py-4 px-6 sm:px-8 text-xs sm:text-sm font-bold flex items-center gap-2.5 shadow-xl transition-all rounded-md active:scale-95"
+                      className="btn-primary py-3.5 sm:py-4 px-5 sm:px-8 text-xs sm:text-sm font-bold flex items-center justify-center gap-2.5 shadow-xl transition-all rounded-md active:scale-95 w-full xs:w-auto"
                       style={{ backgroundColor: slide.accentColor }}
                     >
-                      <ShoppingBag className="w-4 h-4" />
+                      <ShoppingBag className="w-4 h-4 shrink-0" />
                       {slide.primaryCta}
                     </button>
                   ) : (
                     <Link
                       href={slide.primaryLink || '/shop'}
-                      className="btn-primary py-3.5 sm:py-4 px-6 sm:px-8 text-xs sm:text-sm font-bold flex items-center gap-2.5 shadow-xl transition-all bg-brand-red rounded-md active:scale-95"
+                      className="btn-primary py-3.5 sm:py-4 px-5 sm:px-8 text-xs sm:text-sm font-bold flex items-center justify-center gap-2.5 shadow-xl transition-all bg-brand-red rounded-md active:scale-95 w-full xs:w-auto"
                     >
                       {slide.primaryCta}
-                      <ArrowRight className="w-4 h-4" />
+                      <ArrowRight className="w-4 h-4 shrink-0" />
                     </Link>
                   )}
 
                   <Link
                     href={slide.secondaryLink}
-                    className="btn-secondary py-3.5 sm:py-4 px-5 sm:px-7 text-xs sm:text-sm font-bold transition-all rounded-md active:scale-95"
+                    className="btn-secondary py-3.5 sm:py-4 px-5 sm:px-7 text-xs sm:text-sm font-bold transition-all rounded-md active:scale-95 w-full xs:w-auto text-center justify-center"
                   >
                     {slide.secondaryCta}
                   </Link>
                 </div>
 
                 {/* 6. Micro Trust Badges */}
-                <div className="flex flex-wrap items-center gap-5 sm:gap-7 pt-4 sm:pt-5 border-t border-white/10 text-xs sm:text-sm text-gray-300 font-medium mt-5">
+                <div className="flex flex-wrap items-center gap-4 sm:gap-7 pt-4 sm:pt-5 border-t border-white/10 text-xs sm:text-sm text-gray-300 font-medium mt-5">
                   <div className="flex items-center gap-2">
                     <Shield className="w-4 h-4 text-red-500 flex-shrink-0" />
                     <span>100% Authentic Japanese Import</span>
@@ -270,7 +270,7 @@ export function HeroSection() {
           {/* ============================================================
               RIGHT COLUMN: 3D Showcase Card & Controls
              ============================================================ */}
-          <div className="w-full md:w-1/2 flex flex-col items-center justify-center shrink-0">
+          <div className="w-full md:w-1/2 flex flex-col items-center justify-center md:shrink-0">
             
             <AnimatePresence mode="wait">
               <motion.div
@@ -279,7 +279,7 @@ export function HeroSection() {
                 animate={{ opacity: 1, scale: 1 }}
                 exit={{ opacity: 0, scale: 0.95 }}
                 transition={{ duration: 0.4, ease: 'easeOut' }}
-                className="w-full max-w-[320px] sm:max-w-[380px] lg:max-w-[420px] bg-gradient-to-b from-[#181622] via-[#0E0D14] to-black border-2 rounded-xl shadow-2xl p-3.5 sm:p-4 flex flex-col justify-between"
+                className="w-full max-w-sm sm:max-w-[380px] lg:max-w-[420px] mx-auto bg-gradient-to-b from-[#181622] via-[#0E0D14] to-black border-2 rounded-xl shadow-2xl p-3.5 sm:p-4 flex flex-col justify-between"
                 style={{
                   borderColor: `${slide.accentColor}99`,
                   boxShadow: `0 20px 60px -10px ${slide.glowColor}`,

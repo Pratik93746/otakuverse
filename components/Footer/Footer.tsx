@@ -88,15 +88,15 @@ export function Footer() {
               <p className="text-gray-400 text-xs mb-3">
                 Get exclusive deals, new arrivals & collector tips.
               </p>
-              <form className="flex gap-0">
+              <form className="flex flex-col xs:flex-row gap-2 xs:gap-0">
                 <input
                   type="email"
                   placeholder="Enter your email"
-                  className="flex-1 px-4 py-2.5 bg-gray-900 border border-gray-700 text-sm text-white placeholder:text-gray-500 outline-none focus:border-brand-red transition-colors"
+                  className="flex-1 min-w-0 px-4 py-2.5 bg-gray-900 border border-gray-700 text-sm text-white placeholder:text-gray-500 outline-none focus:border-brand-red transition-colors w-full"
                 />
                 <button
                   type="submit"
-                  className="px-4 py-2.5 bg-brand-red text-white hover:bg-brand-red-dark transition-colors flex items-center gap-2 text-sm font-semibold tracking-wider uppercase whitespace-nowrap"
+                  className="px-4 py-2.5 bg-brand-red text-white hover:bg-brand-red-dark transition-colors flex items-center justify-center gap-2 text-sm font-semibold tracking-wider uppercase whitespace-nowrap"
                 >
                   Subscribe
                   <ArrowRight className="w-3.5 h-3.5" />

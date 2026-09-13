@@ -68,7 +68,7 @@ export async function LimitedEditionSection() {
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-stretch">
           {/* Main 3D Sukuna Collector Spotlight (Exact 9:16 Ratio) */}
           <div className="lg:col-span-5 flex justify-center items-center">
-            <Card3DTilt intensity={20} glare={true} className="w-[280px] sm:w-[320px] lg:w-[340px] h-[500px] sm:h-[560px]">
+            <Card3DTilt intensity={20} glare={true} className="w-full max-w-[320px] lg:max-w-[340px] h-[500px] sm:h-[560px] mx-auto">
               <div className="relative w-full h-full min-h-[480px] bg-gradient-to-b from-red-950/60 via-black to-black border-2 border-red-600/60 shadow-2xl shadow-red-900/40 overflow-hidden flex flex-col justify-between p-5 group rounded-xs">
                 <Image
                   src="/custom/sukuna_collectors_3d.png"

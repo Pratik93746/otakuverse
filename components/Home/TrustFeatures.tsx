@@ -103,7 +103,7 @@ export function TrustFeatures() {
                 </div>
 
                 {/* Title — white text for dark bg */}
-                <p className="font-heading text-sm font-black tracking-[0.15em] uppercase text-white whitespace-nowrap mb-1">
+                <p className="font-heading text-xs sm:text-sm font-black tracking-wider uppercase text-white mb-1 text-center">
                   {f.title}
                 </p>
 

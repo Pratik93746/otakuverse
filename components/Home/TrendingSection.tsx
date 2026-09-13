@@ -244,19 +244,19 @@ export function TrendingSection() {
                 </div>
 
                 {/* Action Buttons */}
-                <div className="flex flex-wrap items-center gap-3 pt-2">
+                <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 pt-2">
                   <button
                     onClick={() => handleQuickAdd(activeItem)}
-                    className="btn-primary py-3.5 px-6 text-xs sm:text-sm font-bold uppercase tracking-widest flex items-center gap-2 shadow-xl rounded-md"
+                    className="btn-primary py-3.5 px-4 sm:px-6 text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-2 shadow-xl rounded-md w-full sm:w-auto"
                     style={{ backgroundColor: activeItem.accentColor }}
                   >
-                    <ShoppingBag className="w-4 h-4" /> SECURE THIS DROP • {formatPrice(activeItem.price)}
+                    <ShoppingBag className="w-4 h-4 shrink-0" /> SECURE THIS DROP • {formatPrice(activeItem.price)}
                   </button>
                   <Link
                     href={`/product/${activeItem.slug}`}
-                    className="btn-secondary py-3.5 px-6 text-xs sm:text-sm font-bold uppercase tracking-widest flex items-center gap-1.5 rounded-md"
+                    className="btn-secondary py-3.5 px-4 sm:px-6 text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 rounded-md w-full sm:w-auto"
                   >
-                    <Eye className="w-4 h-4" /> 3D & 360° INSPECT
+                    <Eye className="w-4 h-4 shrink-0" /> 3D & 360° INSPECT
                   </Link>
                 </div>
               </motion.div>

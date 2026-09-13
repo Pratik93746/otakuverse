@@ -58,6 +58,9 @@ html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  overflow-x: hidden;
+  max-width: 100%;
+  width: 100%;
 }
 
 body {
@@ -65,7 +68,16 @@ body {
   color: #E5E5E5;
   background-color: #0A0A0F;
   overflow-x: hidden;
+  max-width: 100%;
+  width: 100%;
+  position: relative;
   -webkit-font-smoothing: antialiased;
+}
+
+main {
+  width: 100%;
+  max-width: 100%;
+  overflow-x: clip;
 }
 
 h1, h2, h3, h4, h5, h6 {
