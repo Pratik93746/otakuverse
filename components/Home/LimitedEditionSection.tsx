@@ -1,29 +1,14 @@
 import Link from 'next/link';
 import Image from 'next/image';
-import { ArrowRight, Star, Crown, ShoppingBag, Eye } from 'lucide-react';
-import { prisma } from '@/lib/prisma';
+import { ArrowRight, Star, Crown, ShoppingBag } from 'lucide-react';
 import { ProductCard } from '@/components/ProductCard/ProductCard';
-import { MOCK_PRODUCTS } from '@/lib/mockProducts';
 import { Card3DTilt } from '@/components/UI/Card3DTilt';
 import { formatPrice } from '@/lib/utils';
+import { getProducts } from '@/lib/db/products';
 
 async function getLimitedEditions() {
-  try {
-    const p = await prisma.product.findMany({
-      where: { isLimitedEdition: true, isPublished: true },
-      include: {
-        images: { where: { isMain: true }, take: 1 },
-        character: true,
-        anime: true,
-        brand: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 4,
-    });
-    return p.length > 0 ? p : (MOCK_PRODUCTS.filter((x) => x.isLimitedEdition).slice(0, 4) as any);
-  } catch {
-    return MOCK_PRODUCTS.filter((x) => x.isLimitedEdition).slice(0, 4) as any;
-  }
+  const res = await getProducts({ filter: 'limited', limit: 4 });
+  return res.products || [];
 }
 
 export async function LimitedEditionSection() {
@@ -130,19 +115,19 @@ export async function LimitedEditionSection() {
           <div className="lg:col-span-7 grid grid-cols-2 gap-4">
             {products.map((product: any) => (
               <ProductCard
-                key={product.id}
+                key={product._id?.toString() || product.id || product.slug}
                 product={{
-                  id: product.id,
+                  id: product._id?.toString() || product.id || product.slug,
                   name: product.name,
                   slug: product.slug,
                   price: product.price,
                   compareAtPrice: product.compareAtPrice ?? undefined,
-                  image: (product as any).images?.[0]?.url ?? (product as any).image ?? '',
-                  characterName: product.character?.name ?? (product as any).characterName,
-                  animeName: product.anime?.name ?? (product as any).animeName,
-                  brandName: product.brand?.name ?? (product as any).brandName,
+                  image: product.image || product.images?.[0]?.url || '',
+                  characterName: product.characterName,
+                  animeName: product.animeName,
+                  brandName: product.brandName,
                   stock: product.stock,
-                  isSoldOut: product.isSoldOut || product.stock === 0,
+                  isSoldOut: product.isSoldOut || product.stock <= 0,
                   isLimitedEdition: true,
                   isPreOrder: product.isPreOrder,
                 }}

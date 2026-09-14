@@ -1,6 +1,4 @@
 import { create } from 'zustand';
-import { auth } from '@/lib/firebase';
-import { syncCartToFirestore, clearFirestoreCart } from '@/lib/firestore';
 
 export interface CartItem {
   id: string;
@@ -37,59 +35,26 @@ interface CartStore {
   getSubtotal: () => number;
 }
 
-function getStorageKey(userId?: string | null): string {
-  if (!userId) return 'otakuverse-cart-guest';
-  return `otakuverse-cart-${userId}`;
-}
+let syncTimeout: NodeJS.Timeout | null = null;
 
-function saveToLocalStorage(userId: string | null, items: CartItem[]) {
+async function syncMongoCartDirectly(items: CartItem[]) {
   if (typeof window === 'undefined') return;
-  try {
-    const key = getStorageKey(userId);
-    localStorage.setItem(key, JSON.stringify(items));
-  } catch (e) {
-    console.debug('LocalStorage write notice:', e);
-  }
-}
 
-async function syncFirestoreCartDirectly(
-  items: CartItem[],
-  activeUserId: string | null,
-  activeUserEmail: string | null,
-  activeUserName: string | null
-) {
-  if (typeof window === 'undefined') return;
-  try {
-    const fbUser = auth?.currentUser;
-    const targetUserId = activeUserId || (fbUser && !fbUser.isAnonymous ? fbUser.uid : null);
+  // Debounce rapid cart clicks
+  if (syncTimeout) clearTimeout(syncTimeout);
 
-    if (targetUserId) {
-      await syncCartToFirestore(
-        targetUserId,
-        activeUserEmail || fbUser?.email || '',
-        activeUserName || fbUser?.displayName || 'Collector',
-        items.map((i) => ({
-          productId: i.productId,
-          name: i.name,
-          slug: i.slug,
-          image: i.image,
-          price: i.price,
-          quantity: i.quantity,
-          stock: i.stock,
-        })),
-        {
-          id: targetUserId,
-          email: activeUserEmail || fbUser?.email || undefined,
-          name: activeUserName || fbUser?.displayName || undefined,
-        }
-      );
+  syncTimeout = setTimeout(async () => {
+    try {
+      const { fetchWithAuth } = await import('@/lib/api-client');
+      await fetchWithAuth('/api/cart', {
+        method: 'POST',
+        body: JSON.stringify({ items }),
+      });
+      window.dispatchEvent(new CustomEvent('otakuverse-cart-updated', { detail: items }));
+    } catch (err) {
+      console.warn('⚠️ Failed to sync cart to MongoDB:', err);
     }
-
-    // Also dispatch custom event for any listening providers
-    window.dispatchEvent(new CustomEvent('otakuverse-cart-updated', { detail: items }));
-  } catch (err) {
-    console.warn('Failed to trigger cart sync:', err);
-  }
+  }, 300);
 }
 
 export const useCartStore = create<CartStore>()((set, get) => ({
@@ -102,23 +67,11 @@ export const useCartStore = create<CartStore>()((set, get) => ({
   setUser: (userId, email, name) => {
     const currentUserId = get().activeUserId;
     if (currentUserId !== userId) {
-      // Switching user context: load user-scoped items from localStorage if available
-      let userItems: CartItem[] = [];
-      if (typeof window !== 'undefined' && userId) {
-        try {
-          const raw = localStorage.getItem(getStorageKey(userId));
-          if (raw) {
-            const parsed = JSON.parse(raw);
-            if (Array.isArray(parsed)) userItems = parsed;
-          }
-        } catch {}
-      }
-
       set({
         activeUserId: userId,
         activeUserEmail: email || null,
         activeUserName: name || null,
-        items: userItems,
+        items: [],
       });
       return;
     }
@@ -131,7 +84,6 @@ export const useCartStore = create<CartStore>()((set, get) => ({
   },
 
   setItems: (items) => {
-    saveToLocalStorage(get().activeUserId, items);
     set({ items });
   },
 
@@ -149,13 +101,9 @@ export const useCartStore = create<CartStore>()((set, get) => ({
         nextItems = [...state.items, { ...newItem, quantity: 1 }];
       }
 
-      saveToLocalStorage(state.activeUserId, nextItems);
-      syncFirestoreCartDirectly(
-        nextItems,
-        state.activeUserId,
-        state.activeUserEmail,
-        state.activeUserName
-      );
+      if (state.activeUserId) {
+        syncMongoCartDirectly(nextItems);
+      }
 
       return {
         items: nextItems,
@@ -167,13 +115,9 @@ export const useCartStore = create<CartStore>()((set, get) => ({
   removeItem: (productId) =>
     set((state) => {
       const nextItems = state.items.filter((i) => i.productId !== productId);
-      saveToLocalStorage(state.activeUserId, nextItems);
-      syncFirestoreCartDirectly(
-        nextItems,
-        state.activeUserId,
-        state.activeUserEmail,
-        state.activeUserName
-      );
+      if (state.activeUserId) {
+        syncMongoCartDirectly(nextItems);
+      }
       return { items: nextItems };
     }),
 
@@ -187,13 +131,9 @@ export const useCartStore = create<CartStore>()((set, get) => ({
                 ? { ...i, quantity: Math.min(quantity, i.stock) }
                 : i
             );
-      saveToLocalStorage(state.activeUserId, nextItems);
-      syncFirestoreCartDirectly(
-        nextItems,
-        state.activeUserId,
-        state.activeUserEmail,
-        state.activeUserName
-      );
+      if (state.activeUserId) {
+        syncMongoCartDirectly(nextItems);
+      }
       return { items: nextItems };
     }),
 
@@ -203,27 +143,18 @@ export const useCartStore = create<CartStore>()((set, get) => ({
 
     if (typeof window !== 'undefined') {
       if (isSignOut) {
-        // On sign out: reset memory state and guest cart
-        // Preserves user's remote Firestore cart for next login
         set({
           activeUserId: null,
           activeUserEmail: null,
           activeUserName: null,
           items: [],
         });
-        try {
-          localStorage.removeItem('otakuverse-cart-guest');
-        } catch {}
-      } else {
-        // Explicit clear: wipe active user's local and remote Firestore cart
-        if (activeUserId) {
-          clearFirestoreCart(activeUserId).catch((err) => {
-            console.error('Failed to clear cart in Firestore:', err);
-          });
-        }
-        try {
-          localStorage.removeItem(getStorageKey(activeUserId));
-        } catch {}
+      } else if (activeUserId) {
+        import('@/lib/api-client')
+          .then(({ fetchWithAuth }) => {
+            fetchWithAuth('/api/cart', { method: 'DELETE' }).catch(() => {});
+          })
+          .catch(() => {});
       }
 
       window.dispatchEvent(new CustomEvent('otakuverse-cart-updated', { detail: [] }));

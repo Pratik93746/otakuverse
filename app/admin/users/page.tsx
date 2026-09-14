@@ -1,7 +1,7 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getAllFirestoreUsers, getAllFirestoreOrders } from '@/lib/firestore';
-import { getStoredUsers } from '@/lib/customUsersStore';
+import { getAllUsers } from '@/lib/db/users';
+import { getAllOrders } from '@/lib/db/orders';
 import { AdminNav } from '@/components/Admin/AdminNav';
 import { AdminUsersClient, AdminUserItem } from './AdminUsersClient';
 import { AdminAuthGate } from '@/components/Admin/AdminAuthGate';
@@ -13,30 +13,29 @@ export default async function AdminUsersPage() {
     return <AdminAuthGate currentSession={session} callbackUrl="/admin/users" pageTitle="Registered Collectors Directory" />;
   }
 
-  const localUsers = getStoredUsers();
-  let fsUsers: any[] = [];
+  let dbUsers: any[] = [];
   try {
-    fsUsers = await getAllFirestoreUsers();
-  } catch {
-    // ignore
+    dbUsers = await getAllUsers();
+  } catch (err) {
+    console.error('Failed to fetch users from MongoDB:', err);
   }
 
-  // Also extract any customer contact profiles from orders
+  // Also extract customer profiles from orders if any
   let orderCustomers: any[] = [];
   try {
-    const fsOrders = await getAllFirestoreOrders();
-    fsOrders.forEach((o) => {
+    const orders = await getAllOrders();
+    orders.forEach((o) => {
       const email = o.customer?.email || '';
       const phone = o.customer?.phone || o.shippingAddress?.phone || '';
       const name = o.customer?.name || o.shippingAddress?.fullName || '';
       if (email) {
         orderCustomers.push({
-          uid: o.userId || `usr_${email.split('@')[0]}`,
+          uid: o.firebaseUid,
           name: name || email.split('@')[0],
           email,
           phone,
           role: 'USER',
-          createdAt: o.createdAt || new Date().toISOString(),
+          createdAt: o.createdAt?.toISOString() || new Date().toISOString(),
         });
       }
     });
@@ -47,17 +46,17 @@ export default async function AdminUsersPage() {
   // Deduplicate and merge by email
   const userMap = new Map<string, AdminUserItem>();
 
-  [...localUsers, ...fsUsers, ...orderCustomers].forEach((u) => {
+  [...dbUsers, ...orderCustomers].forEach((u) => {
     const emailKey = (u.email || '').toLowerCase().trim();
     if (emailKey) {
       const existing = userMap.get(emailKey);
       userMap.set(emailKey, {
-        uid: u.uid || existing?.uid || `usr_${Math.random().toString(36).substring(2, 7)}`,
+        uid: u.firebaseUid || u.uid || existing?.uid || `usr_${emailKey.split('@')[0]}`,
         name: u.name || existing?.name || emailKey.split('@')[0],
         email: emailKey,
         phone: u.phone || existing?.phone || '',
         role: u.role || existing?.role || (emailKey === 'gojo@otakuverse.com' || emailKey === 'admin@otakuverse.in' ? 'ADMIN' : 'USER'),
-        createdAt: u.createdAt || existing?.createdAt || new Date().toISOString(),
+        createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : (u.createdAt || existing?.createdAt || new Date().toISOString()),
       });
     }
   });

@@ -1,5 +1,4 @@
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
 
 const fallbackBrands = [
   { name: 'Banpresto', slug: 'banpresto', emoji: '🏆' },
@@ -13,19 +12,7 @@ const fallbackBrands = [
 ];
 
 export async function BrandsSection() {
-  let brands: { name: string; slug: string; logo?: string | null }[] = [];
-  try {
-    brands = await prisma.brand.findMany({
-      where: { isActive: true },
-      orderBy: { sortOrder: 'asc' },
-      take: 8,
-      select: { name: true, slug: true, logo: true },
-    });
-  } catch { /* use fallback */ }
-
-  const displayBrands = brands.length > 0
-    ? brands.map((b) => ({ ...b, emoji: '🏷️' }))
-    : fallbackBrands;
+  const displayBrands = fallbackBrands;
 
   return (
     <section className="section-spacing relative overflow-hidden" style={{ backgroundColor: '#0D0D14' }}>
@@ -46,7 +33,7 @@ export async function BrandsSection() {
               className="flex flex-col items-center gap-2 p-3 sm:p-4 rounded-xl border border-white/[0.06] bg-white/[0.03] hover:border-brand-red/50 hover:bg-white/[0.06] transition-all duration-300 group min-w-0"
             >
               <span className="text-2xl sm:text-3xl group-hover:scale-125 transition-transform duration-300">
-                {'emoji' in brand ? brand.emoji : '🏷️'}
+                {brand.emoji}
               </span>
               <p className="text-[10px] sm:text-xs font-semibold tracking-wider uppercase text-gray-400 group-hover:text-white transition-colors text-center leading-tight truncate w-full">
                 {brand.name}

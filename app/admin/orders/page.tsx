@@ -1,7 +1,6 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import { getAllFirestoreOrders } from '@/lib/firestore';
+import { getAllOrders } from '@/lib/db/orders';
 import { AdminNav } from '@/components/Admin/AdminNav';
 import { AdminAuthGate } from '@/components/Admin/AdminAuthGate';
 import Link from 'next/link';
@@ -17,66 +16,30 @@ export default async function AdminOrdersPage() {
     return <AdminAuthGate currentSession={session} callbackUrl="/admin/orders" pageTitle="Store Orders & Fulfillment" />;
   }
 
-  // 1. Fetch all orders from Firestore
+  // Fetch all orders from MongoDB Atlas
   let orders: any[] = [];
   try {
-    const fsOrders = await getAllFirestoreOrders();
-    if (fsOrders.length > 0) {
-      orders = fsOrders.map((o) => ({
-        id: o.id,
-        orderNumber: o.orderNumber,
-        customerName: o.customer?.name || 'Valued Collector',
-        customerEmail: o.customer?.email || '',
-        customerPhone: o.customer?.phone || o.shippingAddress?.phone || '',
-        addressSummary: o.shippingAddress
-          ? `${o.shippingAddress.city}, ${o.shippingAddress.state}`
-          : '—',
-        itemCount: o.items?.length || 0,
-        items: o.items || [],
-        itemSummary: o.items?.map((i: any) => `${i.name} (x${i.quantity})`).join(', ') || '',
-        total: o.total,
-        status: o.orderStatus,
-        paymentStatus: o.payment?.paymentStatus || 'PENDING',
-        paymentMethod: o.payment?.paymentMethod || 'RAZORPAY',
-        createdAt: new Date(o.createdAt),
-      }));
-    }
+    const dbOrders = await getAllOrders();
+    orders = dbOrders.map((o) => ({
+      id: o._id?.toString() || o.orderNumber,
+      orderNumber: o.orderNumber,
+      customerName: o.customer?.name || 'Valued Collector',
+      customerEmail: o.customer?.email || '',
+      customerPhone: o.customer?.phone || o.shippingAddress?.phone || '',
+      addressSummary: o.shippingAddress
+        ? `${o.shippingAddress.city}, ${o.shippingAddress.state}`
+        : '—',
+      itemCount: o.items?.length || 0,
+      items: o.items || [],
+      itemSummary: o.items?.map((i: any) => `${i.name} (x${i.quantity})`).join(', ') || '',
+      total: o.total,
+      status: o.orderStatus,
+      paymentStatus: o.payment?.paymentStatus || 'PENDING',
+      paymentMethod: o.payment?.paymentMethod || 'RAZORPAY',
+      createdAt: o.createdAt,
+    }));
   } catch (err) {
-    console.debug('Firestore admin orders error:', err);
-  }
-
-  // 2. Fast check for Prisma orders (skip if database offline)
-  if (orders.length === 0 && process.env.DATABASE_URL && process.env.DATABASE_URL.includes('postgresql')) {
-    try {
-      const fetchPrisma = prisma.order.findMany({
-        include: {
-          user: { select: { name: true, email: true } },
-          items: true,
-          address: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-      const timeout = new Promise<any[]>((_, reject) => setTimeout(() => reject(new Error('timeout')), 400));
-      const dbOrders = await Promise.race([fetchPrisma, timeout]);
-      orders = dbOrders.map((o: any) => ({
-        id: o.id,
-        orderNumber: o.orderNumber,
-        customerName: o.address?.name || o.user?.name || 'Customer',
-        customerEmail: o.user?.email || '',
-        customerPhone: o.address?.phone || '',
-        addressSummary: o.address ? `${o.address.city}, ${o.address.state}` : '—',
-        itemCount: o.items?.length || 0,
-        items: o.items || [],
-        itemSummary: o.items?.map((i: any) => `${i.name} (x${i.quantity})`).join(', ') || '',
-        total: o.total,
-        status: o.status,
-        paymentStatus: o.paymentStatus,
-        paymentMethod: o.paymentMethod,
-        createdAt: o.createdAt,
-      }));
-    } catch {
-      // ignore
-    }
+    console.error('MongoDB admin orders error:', err);
   }
 
   return (

@@ -1,59 +1,32 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
 import { ProductCard } from '@/components/ProductCard/ProductCard';
 import { User, ShoppingBag } from 'lucide-react';
-import { MOCK_PRODUCTS } from '@/lib/mockProducts';
+import { getProducts } from '@/lib/db/products';
 
 interface Props {
   params: Promise<{ slug: string }> | { slug: string };
 }
 
 async function getCharacterData(slug: string) {
-  try {
-    const char = await prisma.character.findUnique({
-      where: { slug },
-      include: {
-        anime: true,
-        products: {
-          where: { isPublished: true },
-          include: {
-            images: { where: { isMain: true }, take: 1 },
-            character: true,
-            anime: true,
-            brand: true,
-          },
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
-    if (char) return char;
-  } catch {
-    // database offline fallback
-  }
+  const searchName = slug.replace(/-/g, ' ');
+  const res = await getProducts({ character: searchName, limit: 50 });
+  const matchingProducts = res.products || [];
 
-  // Fallback to custom products + mock products search by character slug
-  const { getAllCustomProductsAsync } = await import('@/lib/customProductsStore');
-  const custom = await getAllCustomProductsAsync();
-  const allProducts = [...custom, ...MOCK_PRODUCTS];
-
-  const matchingProducts = allProducts.filter(
-    (p) =>
-      p.characterName?.toLowerCase().replace(/\s+/g, '-') === slug ||
-      p.characterName?.toLowerCase().includes(slug.replace(/-/g, ' '))
-  );
-
-  const charName = matchingProducts[0]?.characterName ?? slug.replace(/-/g, ' ').toUpperCase();
+  const charName =
+    matchingProducts[0]?.characterName ??
+    searchName.charAt(0).toUpperCase() + searchName.slice(1);
   const animeName = matchingProducts[0]?.animeName ?? 'Anime Universe';
+  const animeSlug = matchingProducts[0]?.animeSlug ?? 'anime';
 
   return {
     id: slug,
     name: charName,
     slug,
     description: `Official authentic figures, posable statues, and collectibles featuring ${charName}.`,
-    anime: { name: animeName, slug: (matchingProducts[0] as any)?.animeSlug ?? 'anime' },
-    products: matchingProducts.length > 0 ? matchingProducts : MOCK_PRODUCTS.slice(0, 3),
+    anime: { name: animeName, slug: animeSlug },
+    products: matchingProducts,
   };
 }
 
@@ -89,73 +62,45 @@ export default async function CharacterPage({ params }: Props) {
                 <span>/</span>
               </>
             )}
-            <span className="text-white font-semibold">{char.name}</span>
+            <span className="text-white">{char.name}</span>
           </div>
 
-          <div className="flex items-center gap-2 mb-2">
-            <User className="w-4 h-4 text-brand-red" />
-            <span className="text-xs font-bold tracking-[0.2em] text-brand-red uppercase">
-              CHARACTER VAULT
-            </span>
+          <div className="flex items-center gap-3">
+            <div className="w-12 h-12 bg-purple-600/20 border border-purple-500/40 rounded-full flex items-center justify-center">
+              <User className="w-6 h-6 text-purple-400" />
+            </div>
+            <div>
+              <h1 className="font-heading text-3xl sm:text-4xl uppercase tracking-wider">{char.name}</h1>
+              {char.anime && (
+                <p className="text-xs text-purple-400 font-semibold tracking-wide uppercase mt-0.5">
+                  Series: {char.anime.name}
+                </p>
+              )}
+            </div>
           </div>
-          <h1 className="font-heading text-4xl sm:text-6xl tracking-widest uppercase">
-            {char.name}
-          </h1>
-          {char.anime && (
-            <p className="text-gray-400 text-sm mt-1">From Franchise: <strong className="text-white">{char.anime.name}</strong></p>
-          )}
-          {char.description && (
-            <p className="text-gray-300 text-sm max-w-2xl mt-4 leading-relaxed">
-              {char.description}
-            </p>
-          )}
+          <p className="text-sm text-gray-400 mt-3 max-w-2xl">{char.description}</p>
         </div>
       </div>
 
       <div className="container-wide py-10">
-        <div className="flex items-end justify-between mb-8 pb-4 border-b border-gray-100">
-          <div>
-            <h2 className="section-title text-left">
-              {char.name.toUpperCase()} FIGURES & STATUES ({char.products.length})
-            </h2>
-            <div className="h-0.5 w-16 bg-brand-red mt-2" />
-          </div>
+        <div className="flex items-center justify-between mb-6">
+          <h2 className="font-heading text-xl uppercase tracking-wide">
+            AVAILABLE FIGURES & STATUES ({char.products.length})
+          </h2>
         </div>
 
         {char.products.length === 0 ? (
-          <div className="py-16 text-center bg-gray-50 p-8 border border-gray-100">
-            <ShoppingBag className="w-16 h-16 text-gray-300 mx-auto mb-3" />
-            <p className="font-heading text-2xl text-gray-400 tracking-wide mb-2">
-              NO FIGURES FOUND FOR {char.name.toUpperCase()}
-            </p>
-            <Link href="/shop" className="btn-primary mt-4">
+          <div className="text-center py-16 bg-gray-50 border border-gray-100 rounded-sm">
+            <ShoppingBag className="w-12 h-12 text-gray-300 mx-auto mb-3" />
+            <p className="text-gray-500 font-medium text-sm">No collectibles currently found for {char.name}</p>
+            <Link href="/shop" className="btn-primary text-xs mt-4 inline-flex items-center">
               Explore All Figures
             </Link>
           </div>
         ) : (
-          <div className="product-grid">
-            {char.products.map((p: any) => (
-              <ProductCard
-                key={p.id}
-                product={{
-                  id: p.id,
-                  name: p.name,
-                  slug: p.slug,
-                  price: p.price,
-                  compareAtPrice: p.compareAtPrice ?? undefined,
-                  image: p.images?.[0]?.url ?? p.image ?? '',
-                  characterName: char.name,
-                  animeName: char.anime?.name,
-                  brandName: p.brand?.name ?? p.brandName,
-                  stock: p.stock ?? 10,
-                  isSoldOut: p.isSoldOut || p.stock === 0,
-                  isNewArrival: p.isNewArrival,
-                  isBestSeller: p.isBestSeller,
-                  isLimitedEdition: p.isLimitedEdition,
-                  isPreOrder: p.isPreOrder,
-                  description: p.description,
-                }}
-              />
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4">
+            {char.products.map((product) => (
+              <ProductCard key={(product as any).id || product._id?.toString() || product.slug} product={product as any} />
             ))}
           </div>
         )}

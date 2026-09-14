@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { prisma } from '@/lib/prisma';
-import { updateFirestoreOrderPayment } from '@/lib/firestore';
+import { updateOrderPayment, getOrderByNumber } from '@/lib/db/orders';
 
 export async function POST(request: NextRequest) {
   try {
@@ -10,6 +9,11 @@ export async function POST(request: NextRequest) {
 
     if (!orderNumber) {
       return NextResponse.json({ error: 'Order number is required' }, { status: 400 });
+    }
+
+    const order = await getOrderByNumber(orderNumber);
+    if (!order) {
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
     // Verify signature if Razorpay keys are configured
@@ -25,28 +29,13 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Update Firestore order
-    await updateFirestoreOrderPayment(orderNumber, {
+    // Update order payment status in MongoDB
+    await updateOrderPayment(orderNumber, {
       paymentStatus: 'PAID',
       paymentId: razorpayPaymentId,
       razorpayOrderId,
       razorpaySignature,
     });
-
-    // Dual-write update to Prisma if available
-    try {
-      await prisma.order.update({
-        where: { orderNumber },
-        data: {
-          status: 'CONFIRMED',
-          paymentStatus: 'PAID',
-          razorpayPaymentId,
-          razorpaySignature,
-        },
-      });
-    } catch {
-      // ignore prisma fallback error
-    }
 
     return NextResponse.json({ success: true, message: 'Payment verified and order confirmed' });
   } catch (error) {

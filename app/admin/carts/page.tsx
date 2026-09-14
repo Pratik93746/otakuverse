@@ -1,6 +1,6 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getAllFirestoreCarts } from '@/lib/firestore';
+import { getAllCarts } from '@/lib/db/carts';
 import { AdminNav } from '@/components/Admin/AdminNav';
 import { AdminAuthGate } from '@/components/Admin/AdminAuthGate';
 import { ShoppingCart, Info, Clock, ExternalLink } from 'lucide-react';
@@ -16,12 +16,21 @@ export default async function AdminCartsPage() {
     return <AdminAuthGate currentSession={session} callbackUrl="/admin/carts" pageTitle="Active Customer Carts" />;
   }
 
-  // Fetch all active carts from Firestore
+  // Fetch all active carts from MongoDB
   let carts: any[] = [];
   try {
-    carts = await getAllFirestoreCarts();
+    const dbCarts = await getAllCarts();
+    carts = dbCarts.map((c) => ({
+      userId: c.firebaseUid,
+      userEmail: `${c.firebaseUid}@collector.otakuverse.com`,
+      userName: 'Collector',
+      items: c.items,
+      subtotal: c.subtotal,
+      totalItems: c.totalItems,
+      updatedAt: c.updatedAt?.toISOString(),
+    }));
   } catch (err) {
-    console.debug('Firestore carts fetch notice:', err);
+    console.error('MongoDB carts fetch error:', err);
   }
 
   return (

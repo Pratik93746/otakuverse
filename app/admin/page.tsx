@@ -1,12 +1,9 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import {
-  getAllFirestoreOrders,
-  getAllFirestoreCarts,
-} from '@/lib/firestore';
-import { getStoredCustomProducts, getRemovedProductIds, getProductOverrides } from '@/lib/customProductsStore';
-import { getStoredUsers } from '@/lib/customUsersStore';
-import { MOCK_PRODUCTS } from '@/lib/mockProducts';
+import { getAllOrders } from '@/lib/db/orders';
+import { getAllCarts } from '@/lib/db/carts';
+import { getAllUsers } from '@/lib/db/users';
+import { getAllProductsAdmin } from '@/lib/db/products';
 import Link from 'next/link';
 import {
   Package,
@@ -30,70 +27,59 @@ export default async function AdminDashboardPage() {
     return <AdminAuthGate currentSession={session} callbackUrl="/admin" pageTitle="Store Management Dashboard" />;
   }
 
-  // 1. Fetch live metrics safely without blocking
-  let fsOrders: any[] = [];
-  let fsCarts: any[] = [];
+  // 1. Fetch live metrics from MongoDB
+  let orders: any[] = [];
+  let carts: any[] = [];
+  let products: any[] = [];
+  let users: any[] = [];
 
   try {
-    const [ordersData, cartsData] = await Promise.all([
-      getAllFirestoreOrders(),
-      getAllFirestoreCarts(),
+    const [ordersData, cartsData, productsData, usersData] = await Promise.all([
+      getAllOrders(),
+      getAllCarts(),
+      getAllProductsAdmin(),
+      getAllUsers(),
     ]);
-    fsOrders = ordersData || [];
-    fsCarts = cartsData || [];
+    orders = ordersData || [];
+    carts = cartsData || [];
+    products = productsData || [];
+    users = usersData || [];
   } catch (err) {
-    console.debug('Firestore dashboard metrics notice:', err);
+    console.error('MongoDB dashboard metrics error:', err);
   }
 
-  // 2. Compute figures count and inventory
-  const customProds = getStoredCustomProducts();
-  const removedIds = getRemovedProductIds();
-  const overrides = getProductOverrides();
+  const productCount = products.length;
+  const userCount = users.length;
+  const orderCount = orders.length;
+  const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+  const activeCartCount = carts.length;
 
-  const allAvailableProducts = [...customProds, ...MOCK_PRODUCTS]
-    .filter((p) => !removedIds.includes(p.id) && !removedIds.includes(p.slug))
-    .map((p) => {
-      const customStock = overrides[p.id]?.stock ?? overrides[p.slug]?.stock;
-      return customStock !== undefined ? { ...p, stock: customStock } : p;
-    });
-
-  const productCount = allAvailableProducts.length;
-
-  // 3. Compute collectors count
-  const storedUsers = getStoredUsers();
-  const userCount = storedUsers.length;
-
-  // 4. Compute orders & revenue
-  const orderCount = fsOrders.length;
-  const totalRevenue = fsOrders.reduce((sum, o) => sum + (o.total || 0), 0);
-  const activeCartCount = fsCarts.length;
-
-  // 5. Recent orders
-  const recentOrders = fsOrders.slice(0, 6).map((o) => ({
-    id: o.id,
+  // Recent orders
+  const recentOrders = orders.slice(0, 6).map((o) => ({
+    id: o._id?.toString() || o.orderNumber,
     orderNumber: o.orderNumber,
     customerName: o.customer?.name || o.shippingAddress?.fullName || 'Valued Collector',
     customerEmail: o.customer?.email || '',
     total: o.total,
     status: o.orderStatus || 'CONFIRMED',
     paymentMethod: o.payment?.paymentMethod || 'RAZORPAY',
-    createdAt: o.createdAt || new Date().toISOString(),
+    createdAt: o.createdAt?.toISOString() || new Date().toISOString(),
   }));
 
-  // 6. Low stock products (stock <= 5)
-  const lowStockProducts = allAvailableProducts
-    .filter((p) => p.stock <= 5)
+  // Low stock products (stock <= 5)
+  const lowStockProducts = products
+    .filter((p) => (Number(p.stock) || 0) <= 5)
     .slice(0, 6);
 
-  // 7. Category distribution
+  // Category distribution
   const categoryStats = [
     {
       name: 'Figures',
       slug: 'figures',
       emoji: '🥷',
       tagline: 'Action Figures & Statues',
-      count: allAvailableProducts.filter((p) => {
-        const c = (p.categoryName || '').toLowerCase();
+      count: products.filter((p: any) => {
+        const c = (p.category || p.categoryName || '').toLowerCase();
         return c.includes('figure') || c.includes('statue');
       }).length,
     },
@@ -102,29 +88,29 @@ export default async function AdminDashboardPage() {
       slug: 'katanas',
       emoji: '🗡️',
       tagline: 'Nichirin Blades & Swords',
-      count: allAvailableProducts.filter((p) => (p.categoryName || '').toLowerCase().includes('katana')).length,
+      count: products.filter((p: any) => (p.category || p.categoryName || '').toLowerCase().includes('katana')).length,
     },
     {
       name: 'Keychains',
       slug: 'keychains',
       emoji: '🗝️',
       tagline: 'Spinners, Charms & Emblems',
-      count: allAvailableProducts.filter((p) => (p.categoryName || '').toLowerCase().includes('keychain')).length,
+      count: products.filter((p: any) => (p.category || p.categoryName || '').toLowerCase().includes('keychain')).length,
     },
     {
       name: 'Clothing',
       slug: 'clothing',
       emoji: '🥋',
       tagline: 'Streetwear, Hoodies & Tees',
-      count: allAvailableProducts.filter((p) => (p.categoryName || '').toLowerCase().includes('cloth')).length,
+      count: products.filter((p: any) => (p.category || p.categoryName || '').toLowerCase().includes('cloth')).length,
     },
     {
       name: 'Collectables',
       slug: 'collectables',
       emoji: '💎',
       tagline: 'Plushies, Devil Fruits & Replicas',
-      count: allAvailableProducts.filter((p) => {
-        const c = (p.categoryName || '').toLowerCase();
+      count: products.filter((p: any) => {
+        const c = (p.category || p.categoryName || '').toLowerCase();
         return c.includes('collect') || c.includes('plush');
       }).length,
     },
@@ -133,7 +119,7 @@ export default async function AdminDashboardPage() {
       slug: 'limited-editions',
       emoji: '⭐',
       tagline: 'Vault Collector Pieces',
-      count: allAvailableProducts.filter((p) => (p.categoryName || '').toLowerCase().includes('limited') || p.isLimitedEdition).length,
+      count: products.filter((p: any) => (p.category || p.categoryName || '').toLowerCase().includes('limited') || p.isLimitedEdition).length,
     },
   ];
 
@@ -357,9 +343,9 @@ export default async function AdminDashboardPage() {
               <p className="text-xs text-green-600 py-4 font-semibold">All figures are well stocked! 🎉</p>
             ) : (
               <div className="space-y-3">
-                {lowStockProducts.map((p) => (
+                {lowStockProducts.map((p: any) => (
                   <div
-                    key={p.id}
+                    key={p._id?.toString() || p.slug || p.name}
                     className="p-3 bg-red-50 border border-red-100 flex items-center justify-between"
                   >
                     <div>

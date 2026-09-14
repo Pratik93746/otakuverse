@@ -16,6 +16,7 @@ import {
 import { formatPrice } from '@/lib/utils';
 import { MOCK_PRODUCTS } from '@/lib/mockProducts';
 import toast from 'react-hot-toast';
+import { fetchWithAuth } from '@/lib/api-client';
 
 export interface AdminOrderItem {
   productId: string;
@@ -67,7 +68,7 @@ export function AdminOrdersClient({ initialOrders }: { initialOrders: AdminOrder
   const handleQuickStatusChange = async (orderNumber: string, newStatus: string) => {
     setUpdatingId(orderNumber);
     try {
-      const res = await fetch(`/api/admin/orders/${orderNumber}`, {
+      const res = await fetchWithAuth(`/api/admin/orders/${orderNumber}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -232,7 +233,7 @@ export function AdminOrdersClient({ initialOrders }: { initialOrders: AdminOrder
               </thead>
               <tbody className="divide-y divide-gray-200">
                 {filteredOrders.map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-50/80 transition-colors align-top">
+                  <tr key={order.orderNumber || order.id} className="hover:bg-gray-50/80 transition-colors align-top">
                     {/* 1. Order Number & Date */}
                     <td className="py-4 px-4 whitespace-nowrap">
                       <Link

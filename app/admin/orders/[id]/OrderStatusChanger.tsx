@@ -4,7 +4,8 @@ import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import toast from 'react-hot-toast';
 import { Loader2, CheckCircle2 } from 'lucide-react';
-import { OrderStatus } from '@/lib/firestore';
+import { OrderStatus } from '@/lib/db/types';
+import { fetchWithAuth } from '@/lib/api-client';
 
 const statuses: { value: OrderStatus; label: string; desc: string; color: string }[] = [
   { value: 'PENDING', label: 'Pending', desc: 'Order awaiting payment or verification', color: 'bg-yellow-100 text-yellow-800' },
@@ -30,7 +31,7 @@ export function OrderStatusChanger({
     if (newStatus === status) return;
     setLoading(true);
     try {
-      const res = await fetch(`/api/admin/orders/${orderNumber}`, {
+      const res = await fetchWithAuth(`/api/admin/orders/${orderNumber}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ status: newStatus }),
@@ -56,7 +57,7 @@ export function OrderStatusChanger({
         <div>
           <h3 className="font-heading text-lg tracking-wider uppercase">Order Fulfillment Status</h3>
           <p className="text-xs text-gray-500">
-            Updating the status syncs with Firestore and reflects in the customer&apos;s account instantly.
+            Updating the status syncs with MongoDB Atlas and reflects in the customer&apos;s account instantly.
           </p>
         </div>
         {loading && <Loader2 className="w-4 h-4 animate-spin text-brand-red" />}

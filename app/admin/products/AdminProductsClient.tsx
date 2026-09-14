@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import toast from 'react-hot-toast';
+import { fetchWithAuth } from '@/lib/api-client';
 
 export interface AdminProductItem {
   id: string;
@@ -137,7 +138,7 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
 
     setSaving(true);
     try {
-      const res = await fetch('/api/admin/products', {
+      const res = await fetchWithAuth('/api/admin/products', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
@@ -158,7 +159,7 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
       if (!res.ok) throw new Error(data.error || 'Failed to create figure');
 
       const created: AdminProductItem = {
-        id: data.product.id,
+        id: data.product.id || data.product._id || data.product.slug,
         name: data.product.name,
         slug: data.product.slug,
         price: data.product.price,
@@ -176,7 +177,7 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
         isLimitedEdition: data.product.isLimitedEdition,
         isPreOrder: data.product.isPreOrder,
         isCustom: true,
-        sku: data.product.id,
+        sku: data.product.id || data.product.slug,
       };
 
       setProducts([created, ...products]);
@@ -204,12 +205,16 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
     if (!confirm(`Are you sure you want to remove "${prod.name}" from the store catalog?`)) return;
 
     try {
-      const res = await fetch(`/api/admin/products?id=${encodeURIComponent(prod.id)}`, { method: 'DELETE' });
-      if (!res.ok) throw new Error('Failed to remove');
+      const targetId = prod.id || prod.slug;
+      const res = await fetchWithAuth(`/api/admin/products?id=${encodeURIComponent(targetId)}`, { method: 'DELETE' });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || 'Failed to remove');
+      }
       setProducts(products.filter((p) => p.id !== prod.id && p.slug !== prod.slug));
       toast.success(`Removed "${prod.name}" from store catalog! 🗑️`);
-    } catch {
-      toast.error('Failed to remove figure');
+    } catch (err: any) {
+      toast.error(err?.message || 'Failed to remove figure');
     }
   };
 
@@ -221,10 +226,10 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
     );
 
     try {
-      const res = await fetch('/api/admin/products', {
+      const res = await fetchWithAuth('/api/admin/products', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: prod.id, stock: newStock }),
+        body: JSON.stringify({ id: prod.id || prod.slug, stock: newStock }),
       });
       if (!res.ok) throw new Error();
       toast.success(`Stock updated: ${newStock} units`);
@@ -241,10 +246,10 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
     );
 
     try {
-      const res = await fetch('/api/admin/products', {
+      const res = await fetchWithAuth('/api/admin/products', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: prod.id, stock: newStock }),
+        body: JSON.stringify({ id: prod.id || prod.slug, stock: newStock }),
       });
       if (!res.ok) throw new Error();
       toast.success(`Stock quantity set to ${newStock} units`);
@@ -419,7 +424,7 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
                   </tr>
                 ) : (
                   filteredProducts.map((product) => (
-                    <tr key={product.id} className="hover:bg-gray-50/80 transition-colors">
+                    <tr key={product.slug || product.id} className="hover:bg-gray-50/80 transition-colors">
                       {/* Figure Thumbnail & Title */}
                       <td className="py-3.5 px-4">
                         <div className="flex items-center gap-3">

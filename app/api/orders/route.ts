@@ -1,30 +1,25 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { prisma } from '@/lib/prisma';
-import { authOptions } from '@/lib/auth';
+import { requireFirebaseUser, handleAuthError } from '@/lib/firebase-admin';
 import { generateOrderNumber } from '@/lib/utils';
-import { MOCK_PRODUCTS } from '@/lib/mockProducts';
-import {
-  createFirestoreOrder,
-  getUserFirestoreOrders,
-  clearFirestoreCart,
-  saveFirestoreAddress,
-  FirestoreOrderItem,
-} from '@/lib/firestore';
-import { saveStoredOrder } from '@/lib/customOrdersStore';
+import { createOrder, getUserOrders } from '@/lib/db/orders';
+import { clearCart } from '@/lib/db/carts';
+import { saveAddress } from '@/lib/db/addresses';
+import { findUserByFirebaseUid, upsertUser } from '@/lib/db/users';
+import { getProductByIdOrSlug } from '@/lib/db/products';
+import { OrderItem } from '@/lib/db/types';
 import Razorpay from 'razorpay';
 
 const razorpay =
   process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
     ? new Razorpay({
-      key_id: process.env.RAZORPAY_KEY_ID,
-      key_secret: process.env.RAZORPAY_KEY_SECRET,
-    })
+        key_id: process.env.RAZORPAY_KEY_ID,
+        key_secret: process.env.RAZORPAY_KEY_SECRET,
+      })
     : null;
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
+    const verifiedUser = await requireFirebaseUser(request);
     const body = await request.json();
 
     const {
@@ -47,66 +42,45 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Valid delivery address is required' }, { status: 400 });
     }
 
-    const userId = session?.user?.id || 'guest-' + Date.now();
-    const email = customerEmail || session?.user?.email || 'customer@otakuverse.com';
-    const name = customerName || address.name || session?.user?.name || 'Valued Collector';
-    const phone = customerPhone || address.phone || '';
+    // Ensure user profile in MongoDB
+    let dbUser = await findUserByFirebaseUid(verifiedUser.uid);
+    if (!dbUser) {
+      dbUser = await upsertUser(verifiedUser.uid, {
+        email: verifiedUser.email || customerEmail || `${verifiedUser.uid}@collector.otakuverse.com`,
+        name: customerName || verifiedUser.name || 'Collector',
+      });
+    }
 
-    // Calculate subtotal server-side by verifying product catalog
+    const email = customerEmail || dbUser.email || verifiedUser.email || 'collector@otakuverse.com';
+    const name = customerName || address.name || dbUser.name || 'Valued Collector';
+    const phone = customerPhone || address.phone || dbUser.phone || '';
+
+    // Calculate subtotal server-side by looking up verified products in MongoDB
     let serverSubtotal = 0;
-    const verifiedItems: FirestoreOrderItem[] = [];
+    const verifiedItems: OrderItem[] = [];
 
     for (const item of items) {
-      // Look up product in mock catalog first
-      const mockProduct = MOCK_PRODUCTS.find(
-        (p) =>
-          p.id === item.productId ||
-          p.slug === item.productId ||
-          (item.slug && p.slug === item.slug) ||
-          (item.name && p.name.trim().toLowerCase() === item.name.trim().toLowerCase())
-      );
+      const dbProduct = await getProductByIdOrSlug(item.productId || item.slug || item.name);
 
-      let unitPrice = item.price;
-      let productName = item.name || mockProduct?.name || 'Anime Collectible';
-      let productImage = item.image || mockProduct?.image || '';
-      let productSlug = item.slug || mockProduct?.slug || '';
-      let characterName = mockProduct?.characterName || '';
-      let animeName = mockProduct?.animeName || '';
-      let brandName = mockProduct?.brandName || '';
-      let sku = mockProduct?.id || item.productId;
+      let unitPrice = Number(item.price) || 0;
+      let productName = item.name || 'Anime Collectible';
+      let productImage = item.image || '';
+      let productSlug = item.slug || '';
+      let characterName = '';
+      let animeName = '';
+      let brandName = '';
+      let sku = item.productId || '';
 
-      if (mockProduct) {
-        unitPrice = mockProduct.price;
-        productName = mockProduct.name;
-        productImage = mockProduct.image || item.image || '';
-        productSlug = mockProduct.slug;
-        characterName = mockProduct.characterName || '';
-        animeName = mockProduct.animeName || '';
-        brandName = mockProduct.brandName || '';
-      } else {
-        try {
-          const dbProduct = await prisma.product.findUnique({
-            where: { id: item.productId },
-            include: {
-              images: { where: { isMain: true }, take: 1 },
-              character: true,
-              anime: true,
-              brand: true,
-            },
-          });
-          if (dbProduct) {
-            unitPrice = dbProduct.price;
-            productName = dbProduct.name;
-            productImage = dbProduct.images?.[0]?.url || productImage;
-            productSlug = dbProduct.slug;
-            characterName = dbProduct.character?.name || characterName;
-            animeName = dbProduct.anime?.name || animeName;
-            brandName = dbProduct.brand?.name || brandName;
-            sku = dbProduct.sku || sku;
-          }
-        } catch {
-          // Keep fallback
-        }
+      if (dbProduct) {
+        // ALWAYS enforce server/database price
+        unitPrice = dbProduct.price;
+        productName = dbProduct.name;
+        productImage = dbProduct.image || productImage;
+        productSlug = dbProduct.slug;
+        characterName = dbProduct.characterName || '';
+        animeName = dbProduct.animeName || '';
+        brandName = dbProduct.brandName || '';
+        sku = dbProduct.slug || dbProduct._id?.toString() || sku;
       }
 
       const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);
@@ -114,7 +88,7 @@ export async function POST(request: NextRequest) {
       serverSubtotal += itemSubtotal;
 
       verifiedItems.push({
-        productId: item.productId,
+        productId: item.productId || productSlug,
         name: productName,
         slug: productSlug,
         image: productImage,
@@ -122,23 +96,22 @@ export async function POST(request: NextRequest) {
         animeName: animeName || undefined,
         brandName: brandName || undefined,
         sku: sku || undefined,
-        purchasePrice: unitPrice, // Historical immutable purchase price
+        purchasePrice: unitPrice,
         quantity,
         subtotal: itemSubtotal,
       });
     }
 
-    // Calculate delivery, tax, discount & total
+    // Calculate delivery, tax, discount & total server-side
     const shipping = deliveryMethod === 'express' ? 149 : serverSubtotal > 999 ? 0 : 79;
     const tax = Math.round(serverSubtotal * 0.18);
-    const validDiscount = Math.min(discount, serverSubtotal);
+    const validDiscount = Math.min(Math.max(0, Number(discount) || 0), serverSubtotal);
     const serverTotal = serverSubtotal + shipping + tax - validDiscount;
 
-    // Generate permanent Order Number
     const orderNumber = generateOrderNumber();
 
     // Create Razorpay order if online payment
-    let razorpayOrderId: string | undefined;
+    let razorpayOrderId: string | null = null;
     if (paymentMethod !== 'cod' && razorpay) {
       try {
         const rpOrder = await razorpay.orders.create({
@@ -148,11 +121,10 @@ export async function POST(request: NextRequest) {
         });
         razorpayOrderId = rpOrder.id;
       } catch (rpErr) {
-        console.warn('Razorpay order creation skipped/failed:', rpErr);
+        console.warn('⚠️ Razorpay order creation skipped/failed:', rpErr);
       }
     }
 
-    // Immutable Shipping Address Snapshot
     const shippingAddressSnapshot = {
       fullName: address.name || address.fullName,
       phone: address.phone,
@@ -164,26 +136,21 @@ export async function POST(request: NextRequest) {
       country: address.country || 'India',
     };
 
-    // Save address to user's saved addresses in Firestore
-    if (session?.user?.id) {
-      try {
-        await saveFirestoreAddress(session.user.id, shippingAddressSnapshot);
-      } catch (addrErr) {
-        console.debug('Address save notice:', addrErr);
-      }
+    // Save address to user's saved addresses in MongoDB
+    try {
+      await saveAddress(verifiedUser.uid, shippingAddressSnapshot);
+    } catch (addrErr) {
+      console.debug('Address save notice:', addrErr);
     }
 
-    // Construct complete order payload
-    const nowIso = new Date().toISOString();
-    const orderPayload = {
-      id: orderNumber,
+    const now = new Date();
+    const order = await createOrder({
       orderNumber,
-      userId: userId || '',
+      firebaseUid: verifiedUser.uid,
       customer: {
         name,
         email,
         phone,
-        uid: userId || '',
       },
       shippingAddress: shippingAddressSnapshot,
       items: verifiedItems,
@@ -196,170 +163,71 @@ export async function POST(request: NextRequest) {
       deliveryMethod: deliveryMethod || 'standard',
       orderStatus: paymentMethod === 'cod' ? 'CONFIRMED' : 'PENDING',
       payment: {
-        paymentStatus: paymentMethod === 'cod' ? 'PENDING' : 'PENDING',
+        paymentStatus: 'PENDING',
         paymentId: null,
         razorpayOrderId: razorpayOrderId || null,
+        razorpaySignature: null,
         paymentMethod: paymentMethod === 'cod' ? 'COD' : 'RAZORPAY',
         amount: serverTotal,
         currency: 'INR',
-        createdAt: nowIso,
+        createdAt: now,
       },
-      createdAt: nowIso,
-      updatedAt: nowIso,
-    };
+    });
 
-    // 1. Immediately persist to Custom Orders Store (guarantees 100% order capture)
-    try {
-      saveStoredOrder(orderPayload);
-    } catch (storeErr) {
-      console.warn('⚠️ [customOrdersStore notice]:', storeErr);
-    }
-
-    // 2. Sync to Firestore (non-blocking if Firestore network/rules lag)
-    let firestoreOrder = orderPayload;
-    try {
-      firestoreOrder = await createFirestoreOrder(orderPayload as any);
-    } catch (fsErr) {
-      console.warn('⚠️ [Firestore order notice]:', fsErr);
-    }
-
-    // Clear user's Firestore cart upon placing order
-    if (session?.user?.id) {
-      try {
-        await clearFirestoreCart(session.user.id);
-      } catch (cartErr) {
-        // ignore
-      }
-    }
-
-    // Dual-write to Prisma if database is connected
-    try {
-      let addressId: string | undefined;
-      if (session?.user?.id) {
-        const addr = await prisma.address.create({
-          data: {
-            userId: session.user.id,
-            name: shippingAddressSnapshot.fullName,
-            phone: shippingAddressSnapshot.phone,
-            line1: shippingAddressSnapshot.addressLine1,
-            line2: shippingAddressSnapshot.addressLine2 || null,
-            city: shippingAddressSnapshot.city,
-            state: shippingAddressSnapshot.state,
-            pincode: shippingAddressSnapshot.pinCode,
-            country: shippingAddressSnapshot.country,
-          },
-        });
-        addressId = addr.id;
-      }
-
-      await prisma.order.create({
-        data: {
-          orderNumber,
-          userId: session?.user?.id,
-          addressId,
-          status: paymentMethod === 'cod' ? 'CONFIRMED' : 'PENDING',
-          paymentStatus: 'PENDING',
-          paymentMethod: paymentMethod === 'cod' ? 'COD' : 'RAZORPAY',
-          subtotal: serverSubtotal,
-          discount: validDiscount,
-          shipping,
-          tax,
-          total: serverTotal,
-          couponCode: couponCode || null,
-          razorpayOrderId,
-          items: {
-            create: verifiedItems.map((item) => ({
-              productId: item.productId,
-              name: item.name,
-              image: item.image || null,
-              price: item.purchasePrice,
-              quantity: item.quantity,
-              total: item.subtotal,
-            })),
-          },
-        },
-      });
-    } catch {
-      // Prisma fallback ignored if DB server is offline
-    }
+    // Clear MongoDB cart for this verified user
+    await clearCart(verifiedUser.uid);
 
     return NextResponse.json({
-      orderNumber: firestoreOrder.orderNumber,
-      orderId: firestoreOrder.id,
+      orderNumber: order.orderNumber,
+      orderId: order._id?.toString() || order.orderNumber,
       razorpayOrderId,
       total: serverTotal,
     });
-  } catch (error) {
-    console.error('Order creation error:', error);
-    return NextResponse.json({ error: 'Failed to create order' }, { status: 500 });
+  } catch (err) {
+    return handleAuthError(err);
   }
 }
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    const userId = session?.user?.id;
-    const email = session?.user?.email || undefined;
+    const verifiedUser = await requireFirebaseUser(request);
+    const orders = await getUserOrders(verifiedUser.uid);
 
-    if (!userId && !email) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Query Firestore for user's orders
-    const firestoreOrders = await getUserFirestoreOrders(userId || '', email);
-
-    if (firestoreOrders.length > 0) {
-      return NextResponse.json({
-        orders: firestoreOrders.map((o) => ({
-          id: o.id,
-          orderNumber: o.orderNumber,
-          userId: o.userId,
-          status: o.orderStatus,
-          paymentStatus: o.payment.paymentStatus,
-          paymentMethod: o.payment.paymentMethod,
-          subtotal: o.subtotal,
-          shipping: o.shipping,
-          tax: o.tax,
-          discount: o.discount,
-          total: o.total,
-          createdAt: o.createdAt,
-          items: o.items.map((i, idx) => ({
-            id: `${o.orderNumber}-item-${idx}`,
-            name: i.name,
-            image: i.image,
-            price: i.purchasePrice,
-            quantity: i.quantity,
-            total: i.subtotal,
-          })),
-          address: {
-            name: o.shippingAddress.fullName,
-            phone: o.shippingAddress.phone,
-            line1: o.shippingAddress.addressLine1,
-            line2: o.shippingAddress.addressLine2,
-            city: o.shippingAddress.city,
-            state: o.shippingAddress.state,
-            pincode: o.shippingAddress.pinCode,
-          },
+    return NextResponse.json({
+      orders: orders.map((o) => ({
+        id: o._id?.toString() || o.orderNumber,
+        orderNumber: o.orderNumber,
+        userId: o.firebaseUid,
+        firebaseUid: o.firebaseUid,
+        status: o.orderStatus,
+        paymentStatus: o.payment.paymentStatus,
+        paymentMethod: o.payment.paymentMethod,
+        subtotal: o.subtotal,
+        shipping: o.shipping,
+        tax: o.tax,
+        discount: o.discount,
+        total: o.total,
+        createdAt: o.createdAt?.toISOString(),
+        items: o.items.map((i, idx) => ({
+          id: `${o.orderNumber}-item-${idx}`,
+          name: i.name,
+          image: i.image,
+          price: i.purchasePrice,
+          quantity: i.quantity,
+          total: i.subtotal,
         })),
-      });
-    }
-
-    // Prisma Fallback
-    try {
-      const orders = await prisma.order.findMany({
-        where: { userId },
-        include: {
-          items: true,
-          address: true,
+        address: {
+          name: o.shippingAddress.fullName,
+          phone: o.shippingAddress.phone,
+          line1: o.shippingAddress.addressLine1,
+          line2: o.shippingAddress.addressLine2,
+          city: o.shippingAddress.city,
+          state: o.shippingAddress.state,
+          pincode: o.shippingAddress.pinCode,
         },
-        orderBy: { createdAt: 'desc' },
-      });
-      return NextResponse.json({ orders });
-    } catch {
-      return NextResponse.json({ orders: [] });
-    }
-  } catch (error) {
-    console.error('Fetch orders error:', error);
-    return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 });
+      })),
+    });
+  } catch (err) {
+    return handleAuthError(err);
   }
 }

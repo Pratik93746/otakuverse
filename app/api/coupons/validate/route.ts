@@ -1,32 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { prisma } from '@/lib/prisma';
+
+const ACTIVE_COUPONS: Record<
+  string,
+  {
+    code: string;
+    type: 'PERCENTAGE' | 'FIXED';
+    value: number;
+    maxDiscount?: number;
+    minOrder?: number;
+  }
+> = {
+  OTAKU10: { code: 'OTAKU10', type: 'PERCENTAGE', value: 10, maxDiscount: 1000, minOrder: 1500 },
+  BANKAI20: { code: 'BANKAI20', type: 'PERCENTAGE', value: 20, maxDiscount: 2000, minOrder: 3000 },
+  GOJO500: { code: 'GOJO500', type: 'FIXED', value: 500, minOrder: 4000 },
+  WELCOME: { code: 'WELCOME', type: 'PERCENTAGE', value: 15, maxDiscount: 1500, minOrder: 2000 },
+};
 
 export async function POST(request: NextRequest) {
   try {
-    const { code, orderTotal } = await request.json();
+    const { code, orderTotal = 0 } = await request.json();
 
-    if (!code) return NextResponse.json({ error: 'Coupon code required' }, { status: 400 });
-
-    const coupon = await prisma.coupon.findUnique({
-      where: { code: code.toUpperCase() },
-    });
-
-    if (!coupon || !coupon.isActive) {
-      return NextResponse.json({ error: 'Invalid or expired coupon' }, { status: 400 });
+    if (!code) {
+      return NextResponse.json({ error: 'Coupon code required' }, { status: 400 });
     }
 
-    if (coupon.expiresAt && coupon.expiresAt < new Date()) {
-      return NextResponse.json({ error: 'Coupon has expired' }, { status: 400 });
-    }
+    const cleanCode = code.toUpperCase().trim();
+    const coupon = ACTIVE_COUPONS[cleanCode];
 
-    if (coupon.usageLimit && coupon.usedCount >= coupon.usageLimit) {
-      return NextResponse.json({ error: 'Coupon usage limit reached' }, { status: 400 });
+    if (!coupon) {
+      return NextResponse.json({ error: 'Invalid or expired coupon code' }, { status: 400 });
     }
 
     if (coupon.minOrder && orderTotal < coupon.minOrder) {
-      return NextResponse.json({
-        error: `Minimum order amount ₹${coupon.minOrder} required for this coupon`,
-      }, { status: 400 });
+      return NextResponse.json(
+        { error: `Minimum order amount ₹${coupon.minOrder} required for this coupon` },
+        { status: 400 }
+      );
     }
 
     let discount = 0;
@@ -37,7 +46,7 @@ export async function POST(request: NextRequest) {
       discount = coupon.value;
     }
 
-    return NextResponse.json({ discount, couponId: coupon.id });
+    return NextResponse.json({ discount, couponId: coupon.code });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to validate coupon' }, { status: 500 });
   }

@@ -1,81 +1,21 @@
 import Link from 'next/link';
 import { ArrowRight } from 'lucide-react';
-import { prisma } from '@/lib/prisma';
 import { ProductCard } from '@/components/ProductCard/ProductCard';
-import { MOCK_PRODUCTS } from '@/lib/mockProducts';
-import { getAllCustomProductsAsync } from '@/lib/customProductsStore';
+import { getProducts } from '@/lib/db/products';
 
 async function getNewArrivals() {
-  const custom = await getAllCustomProductsAsync();
-  const customNew = custom.filter((x) => x.isNewArrival);
-
-  try {
-    const p = await prisma.product.findMany({
-      where: { isNewArrival: true, isPublished: true },
-      include: {
-        images: { where: { isMain: true }, take: 1 },
-        character: true,
-        anime: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: 8,
-    });
-    const catalog = p.length > 0 ? p : (MOCK_PRODUCTS.filter((x) => x.isNewArrival).slice(0, 8) as any);
-    return [...customNew, ...catalog].slice(0, 8);
-  } catch {
-    const catalog = MOCK_PRODUCTS.filter((x) => x.isNewArrival).slice(0, 8) as any;
-    return [...customNew, ...catalog].slice(0, 8);
-  }
+  const res = await getProducts({ filter: 'new', limit: 8 });
+  return res.products || [];
 }
 
 async function getBestSellers() {
-  const custom = await getAllCustomProductsAsync();
-  const customBest = custom.filter((x) => x.isBestSeller);
-
-  try {
-    const p = await prisma.product.findMany({
-      where: { isBestSeller: true, isPublished: true },
-      include: {
-        images: { where: { isMain: true }, take: 1 },
-        character: true,
-        anime: true,
-      },
-      orderBy: { salesCount: 'desc' },
-      take: 8,
-    });
-    const catalog = p.length > 0 ? p : (MOCK_PRODUCTS.filter((x) => x.isBestSeller).slice(0, 8) as any);
-    return [...customBest, ...catalog].slice(0, 8);
-  } catch {
-    const catalog = MOCK_PRODUCTS.filter((x) => x.isBestSeller).slice(0, 8) as any;
-    return [...customBest, ...catalog].slice(0, 8);
-  }
+  const res = await getProducts({ filter: 'bestsellers', limit: 8 });
+  return res.products || [];
 }
 
 async function getBestDeals() {
-  const custom = await getAllCustomProductsAsync();
-  const customDeals = custom.filter((x) => (x.compareAtPrice ?? 0) > x.price);
-
-  try {
-    const p = await prisma.product.findMany({
-      where: {
-        isPublished: true,
-        compareAtPrice: { not: null },
-        discount: { gt: 10 },
-      },
-      include: {
-        images: { where: { isMain: true }, take: 1 },
-        character: true,
-        anime: true,
-      },
-      orderBy: { discount: 'desc' },
-      take: 8,
-    });
-    const catalog = p.length > 0 ? p : (MOCK_PRODUCTS.filter((x) => (x.compareAtPrice ?? 0) > x.price).slice(0, 8) as any);
-    return [...customDeals, ...catalog].slice(0, 8);
-  } catch {
-    const catalog = MOCK_PRODUCTS.filter((x) => (x.compareAtPrice ?? 0) > x.price).slice(0, 8) as any;
-    return [...customDeals, ...catalog].slice(0, 8);
-  }
+  const res = await getProducts({ filter: 'sale', limit: 8 });
+  return res.products || [];
 }
 
 function ProductSection({
@@ -85,7 +25,7 @@ function ProductSection({
   bgColor = 'bg-[#0A0A0F]',
 }: {
   title: string;
-  products: Awaited<ReturnType<typeof getNewArrivals>>;
+  products: any[];
   viewAllHref: string;
   bgColor?: string;
 }) {
@@ -109,18 +49,18 @@ function ProductSection({
         <div className="product-grid">
           {products.map((product: any) => (
             <ProductCard
-              key={product.id}
+              key={product._id?.toString() || product.id || product.slug}
               product={{
-                id: product.id,
+                id: product._id?.toString() || product.id || product.slug,
                 name: product.name,
                 slug: product.slug,
                 price: product.price,
                 compareAtPrice: product.compareAtPrice ?? undefined,
-                image: (product as any).images?.[0]?.url ?? (product as any).image ?? '',
-                characterName: product.character?.name,
-                animeName: product.anime?.name,
+                image: product.image || product.images?.[0]?.url || '',
+                characterName: product.characterName,
+                animeName: product.animeName,
                 stock: product.stock,
-                isSoldOut: product.isSoldOut || product.stock === 0,
+                isSoldOut: product.isSoldOut || product.stock <= 0,
                 isNewArrival: product.isNewArrival,
                 isBestSeller: product.isBestSeller,
                 isLimitedEdition: product.isLimitedEdition,

@@ -1,8 +1,8 @@
 import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import { getUserFirestoreOrders, getFirestoreAddresses } from '@/lib/firestore';
+import { getUserOrders } from '@/lib/db/orders';
+import { getUserAddresses } from '@/lib/db/addresses';
 import Link from 'next/link';
 import { Package, User, Heart, ShieldCheck } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
@@ -16,76 +16,43 @@ export default async function AccountPage() {
   }
 
   const userId = session.user.id;
-  const userEmail = session.user.email || undefined;
 
-  // 1. Fetch orders from Firestore with Prisma fallback
+  // 1. Fetch user orders from MongoDB Atlas
   let orders: any[] = [];
   try {
-    const fsOrders = await getUserFirestoreOrders(userId, userEmail);
-    if (fsOrders.length > 0) {
-      orders = fsOrders.slice(0, 5).map((o) => ({
-        id: o.id,
-        orderNumber: o.orderNumber,
-        total: o.total,
-        status: o.orderStatus,
-        createdAt: new Date(o.createdAt),
-        items: o.items.map((i) => ({
-          name: i.name,
-          quantity: i.quantity,
-          price: i.purchasePrice,
-        })),
-      }));
-    }
+    const dbOrders = await getUserOrders(userId);
+    orders = dbOrders.slice(0, 5).map((o) => ({
+      id: o._id?.toString() || o.orderNumber,
+      orderNumber: o.orderNumber,
+      total: o.total,
+      status: o.orderStatus,
+      createdAt: new Date(o.createdAt),
+      items: o.items.map((i) => ({
+        name: i.name,
+        quantity: i.quantity,
+        price: i.purchasePrice,
+      })),
+    }));
   } catch (err) {
-    console.debug('Firestore user orders notice:', err);
+    console.error('MongoDB user orders error:', err);
   }
 
-  if (orders.length === 0) {
-    try {
-      const dbOrders = await prisma.order.findMany({
-        where: { userId },
-        include: { items: true },
-        orderBy: { createdAt: 'desc' },
-        take: 5,
-      });
-      orders = dbOrders;
-    } catch {
-      // ignore
-    }
-  }
-
-  // 2. Fetch saved addresses from Firestore with Prisma fallback
+  // 2. Fetch saved addresses from MongoDB Atlas
   let addresses: any[] = [];
   try {
-    const fsAddresses = await getFirestoreAddresses(userId);
-    if (fsAddresses.length > 0) {
-      addresses = fsAddresses.map((a) => ({
-        id: a.id,
-        name: a.fullName,
-        line1: a.addressLine1,
-        line2: a.addressLine2,
-        city: a.city,
-        state: a.state,
-        pincode: a.pinCode,
-        phone: a.phone,
-      }));
-    }
+    const dbAddresses = await getUserAddresses(userId);
+    addresses = dbAddresses.map((a) => ({
+      id: a._id?.toString(),
+      name: a.fullName,
+      line1: a.addressLine1,
+      line2: a.addressLine2,
+      city: a.city,
+      state: a.state,
+      pincode: a.pinCode,
+      phone: a.phone,
+    }));
   } catch (err) {
-    console.debug('Firestore user addresses notice:', err);
-  }
-
-  if (addresses.length === 0) {
-    try {
-      const dbUser = await prisma.user.findUnique({
-        where: { id: userId },
-        include: { addresses: true },
-      });
-      if (dbUser?.addresses) {
-        addresses = dbUser.addresses;
-      }
-    } catch {
-      // ignore
-    }
+    console.error('MongoDB user addresses error:', err);
   }
 
   return (

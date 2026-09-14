@@ -1,8 +1,7 @@
 import { getServerSession } from 'next-auth';
 import { redirect } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
-import { prisma } from '@/lib/prisma';
-import { getUserFirestoreOrders } from '@/lib/firestore';
+import { getUserOrders } from '@/lib/db/orders';
 import Link from 'next/link';
 import Image from 'next/image';
 import { Package, ArrowLeft } from 'lucide-react';
@@ -16,54 +15,34 @@ export default async function OrdersHistoryPage() {
   }
 
   const userId = session.user.id;
-  const userEmail = session.user.email || undefined;
 
-  // 1. Fetch from Firestore
+  // Fetch orders from MongoDB Atlas
   let orders: any[] = [];
   try {
-    const fsOrders = await getUserFirestoreOrders(userId, userEmail);
-    if (fsOrders.length > 0) {
-      orders = fsOrders.map((o) => ({
-        id: o.id,
-        orderNumber: o.orderNumber,
-        total: o.total,
-        status: o.orderStatus,
-        paymentStatus: o.payment.paymentStatus,
-        createdAt: new Date(o.createdAt),
-        address: {
-          name: o.shippingAddress.fullName,
-          city: o.shippingAddress.city,
-          state: o.shippingAddress.state,
-        },
-        items: o.items.map((i, idx) => ({
-          id: `${o.orderNumber}-item-${idx}`,
-          name: i.name,
-          image: i.image,
-          price: i.purchasePrice,
-          quantity: i.quantity,
-          total: i.subtotal,
-        })),
-      }));
-    }
+    const dbOrders = await getUserOrders(userId);
+    orders = dbOrders.map((o) => ({
+      id: o._id?.toString() || o.orderNumber,
+      orderNumber: o.orderNumber,
+      total: o.total,
+      status: o.orderStatus,
+      paymentStatus: o.payment.paymentStatus,
+      createdAt: new Date(o.createdAt),
+      address: {
+        name: o.shippingAddress.fullName,
+        city: o.shippingAddress.city,
+        state: o.shippingAddress.state,
+      },
+      items: o.items.map((i, idx) => ({
+        id: `${o.orderNumber}-item-${idx}`,
+        name: i.name,
+        image: i.image,
+        price: i.purchasePrice,
+        quantity: i.quantity,
+        total: i.subtotal,
+      })),
+    }));
   } catch (err) {
-    console.debug('Firestore orders error:', err);
-  }
-
-  // 2. Fallback to Prisma if Firestore returned no orders
-  if (orders.length === 0) {
-    try {
-      const dbOrders = await prisma.order.findMany({
-        where: { userId },
-        include: {
-          items: true,
-          address: true,
-        },
-        orderBy: { createdAt: 'desc' },
-      });
-      orders = dbOrders;
-    } catch {
-      // ignore
-    }
+    console.error('MongoDB orders error:', err);
   }
 
   return (

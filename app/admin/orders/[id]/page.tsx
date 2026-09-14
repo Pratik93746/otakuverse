@@ -1,8 +1,7 @@
 import { getServerSession } from 'next-auth';
 import { notFound } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
-import { getFirestoreOrder } from '@/lib/firestore';
-import { prisma } from '@/lib/prisma';
+import { getOrderByNumber } from '@/lib/db/orders';
 import { AdminNav } from '@/components/Admin/AdminNav';
 import { OrderStatusChanger } from './OrderStatusChanger';
 import Link from 'next/link';
@@ -36,104 +35,36 @@ export default async function AdminOrderDetailPage(props: {
 
   const { id } = await props.params;
 
-  // 1. Fetch order from Firestore
+  // Fetch order from MongoDB Atlas
   let order: any = null;
   try {
-    const fsOrder = await getFirestoreOrder(id);
-    if (fsOrder) {
+    const dbOrder = await getOrderByNumber(id);
+    if (dbOrder) {
       order = {
-        id: fsOrder.id,
-        orderNumber: fsOrder.orderNumber,
-        userId: fsOrder.userId,
-        customerName: fsOrder.customer?.name || 'Valued Collector',
-        customerEmail: fsOrder.customer?.email || '',
-        customerPhone: fsOrder.customer?.phone || fsOrder.shippingAddress?.phone || '',
-        customerUid: fsOrder.customer?.uid || fsOrder.userId,
-        shippingAddress: fsOrder.shippingAddress,
-        items: fsOrder.items,
-        subtotal: fsOrder.subtotal,
-        shipping: fsOrder.shipping,
-        tax: fsOrder.tax,
-        discount: fsOrder.discount,
-        total: fsOrder.total,
-        couponCode: fsOrder.couponCode,
-        deliveryMethod: fsOrder.deliveryMethod,
-        orderStatus: fsOrder.orderStatus,
-        payment: fsOrder.payment,
-        createdAt: new Date(fsOrder.createdAt),
-        updatedAt: new Date(fsOrder.updatedAt),
+        id: dbOrder._id?.toString() || dbOrder.orderNumber,
+        orderNumber: dbOrder.orderNumber,
+        userId: dbOrder.firebaseUid,
+        customerName: dbOrder.customer?.name || 'Valued Collector',
+        customerEmail: dbOrder.customer?.email || '',
+        customerPhone: dbOrder.customer?.phone || dbOrder.shippingAddress?.phone || '',
+        customerUid: dbOrder.firebaseUid,
+        shippingAddress: dbOrder.shippingAddress,
+        items: dbOrder.items,
+        subtotal: dbOrder.subtotal,
+        shipping: dbOrder.shipping,
+        tax: dbOrder.tax,
+        discount: dbOrder.discount,
+        total: dbOrder.total,
+        couponCode: dbOrder.couponCode,
+        deliveryMethod: dbOrder.deliveryMethod,
+        orderStatus: dbOrder.orderStatus,
+        payment: dbOrder.payment,
+        createdAt: new Date(dbOrder.createdAt),
+        updatedAt: new Date(dbOrder.updatedAt),
       };
     }
   } catch (err) {
-    console.debug('Firestore order detail error:', err);
-  }
-
-  // 2. Fallback to Prisma
-  if (!order) {
-    try {
-      const dbOrder = await prisma.order.findFirst({
-        where: {
-          OR: [{ orderNumber: id }, { id }],
-        },
-        include: {
-          user: true,
-          items: true,
-          address: true,
-        },
-      });
-
-      if (dbOrder) {
-        order = {
-          id: dbOrder.id,
-          orderNumber: dbOrder.orderNumber,
-          userId: dbOrder.userId,
-          customerName: dbOrder.address?.name || dbOrder.user?.name || 'Customer',
-          customerEmail: dbOrder.user?.email || '',
-          customerPhone: dbOrder.address?.phone || '',
-          customerUid: dbOrder.userId || 'N/A',
-          shippingAddress: dbOrder.address
-            ? {
-              fullName: dbOrder.address.name,
-              phone: dbOrder.address.phone,
-              addressLine1: dbOrder.address.line1,
-              addressLine2: dbOrder.address.line2 || '',
-              city: dbOrder.address.city,
-              state: dbOrder.address.state,
-              pinCode: dbOrder.address.pincode,
-              country: dbOrder.address.country,
-            }
-            : null,
-          items: dbOrder.items.map((i) => ({
-            productId: i.productId,
-            name: i.name,
-            image: i.image,
-            purchasePrice: i.price,
-            quantity: i.quantity,
-            subtotal: i.total,
-          })),
-          subtotal: dbOrder.subtotal,
-          shipping: dbOrder.shipping,
-          tax: dbOrder.tax,
-          discount: dbOrder.discount,
-          total: dbOrder.total,
-          couponCode: dbOrder.couponCode,
-          deliveryMethod: 'standard',
-          orderStatus: dbOrder.status as any,
-          payment: {
-            paymentStatus: dbOrder.paymentStatus,
-            paymentMethod: dbOrder.paymentMethod,
-            paymentId: dbOrder.razorpayPaymentId,
-            razorpayOrderId: dbOrder.razorpayOrderId,
-            amount: dbOrder.total,
-            currency: 'INR',
-          },
-          createdAt: dbOrder.createdAt,
-          updatedAt: dbOrder.updatedAt,
-        };
-      }
-    } catch {
-      // ignore
-    }
+    console.error('MongoDB order detail error:', err);
   }
 
   if (!order) {

@@ -117,28 +117,6 @@ function LoginForm() {
 
     setLoading(true);
     try {
-      // Direct Admin fast-track (instant access, bypass network stalls)
-      const isAdminEmail = cleanEmail.toLowerCase() === 'gojo@otakuverse.com' || cleanEmail.toLowerCase() === 'admin@otakuverse.in';
-      if (isAdminEmail && password === 'Admin@123') {
-        const res = await signIn('credentials', {
-          email: cleanEmail,
-          password: 'Admin@123',
-          name: cleanEmail.toLowerCase() === 'gojo@otakuverse.com' ? 'Gojo Satoru' : 'Otakuverse Staff',
-          authType: 'admin-quick',
-          redirect: false,
-          callbackUrl: callbackUrl.startsWith('/admin') ? callbackUrl : '/admin',
-        });
-        if (res?.error) {
-          toast.error('Could not authenticate admin.');
-        } else {
-          toast.success('Admin Privileges Granted! Welcome Satoru Gojo ⚡');
-          router.push(callbackUrl.startsWith('/admin') ? callbackUrl : '/admin');
-          router.refresh();
-        }
-        setLoading(false);
-        return;
-      }
-
       let firebaseUid: string | undefined = undefined;
       let firebaseDisplayName: string | undefined = undefined;
 

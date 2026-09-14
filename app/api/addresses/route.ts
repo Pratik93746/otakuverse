@@ -1,70 +1,40 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-import {
-  getFirestoreAddresses,
-  saveFirestoreAddress,
-  deleteFirestoreAddress,
-} from '@/lib/firestore';
-import { prisma } from '@/lib/prisma';
+import { requireFirebaseUser, handleAuthError } from '@/lib/firebase-admin';
+import { getUserAddresses, saveAddress, deleteAddress } from '@/lib/db/addresses';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    const userId = session?.user?.id;
+    const verifiedUser = await requireFirebaseUser(request);
+    const addresses = await getUserAddresses(verifiedUser.uid);
 
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
-    // Try Firestore first
-    const addresses = await getFirestoreAddresses(userId);
-
-    if (addresses.length > 0) {
-      return NextResponse.json({ addresses });
-    }
-
-    // Fallback to Prisma if database configured
-    try {
-      const dbAddresses = await prisma.address.findMany({
-        where: { userId },
-        orderBy: { createdAt: 'desc' },
-      });
-      return NextResponse.json({
-        addresses: dbAddresses.map((a) => ({
-          id: a.id,
-          userId: a.userId,
-          fullName: a.name,
-          phone: a.phone,
-          addressLine1: a.line1,
-          addressLine2: a.line2 || undefined,
-          city: a.city,
-          state: a.state,
-          pinCode: a.pincode,
-          country: a.country,
-          createdAt: a.createdAt.toISOString(),
-          updatedAt: a.updatedAt.toISOString(),
-        })),
-      });
-    } catch {
-      return NextResponse.json({ addresses: [] });
-    }
+    return NextResponse.json({
+      addresses: addresses.map((a) => ({
+        id: a._id?.toString(),
+        userId: a.firebaseUid,
+        firebaseUid: a.firebaseUid,
+        fullName: a.fullName,
+        phone: a.phone,
+        addressLine1: a.addressLine1,
+        addressLine2: a.addressLine2,
+        city: a.city,
+        state: a.state,
+        pinCode: a.pinCode,
+        country: a.country,
+        isDefault: a.isDefault,
+        createdAt: a.createdAt?.toISOString(),
+        updatedAt: a.updatedAt?.toISOString(),
+      })),
+    });
   } catch (err) {
-    console.error('Error fetching addresses:', err);
-    return NextResponse.json({ error: 'Failed to fetch addresses' }, { status: 500 });
+    return handleAuthError(err);
   }
 }
 
 export async function POST(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    const userId = session?.user?.id;
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+    const verifiedUser = await requireFirebaseUser(request);
     const body = await request.json();
+
     const {
       fullName,
       name,
@@ -78,6 +48,7 @@ export async function POST(request: NextRequest) {
       pinCode,
       pincode,
       country,
+      isDefault,
       id,
     } = body;
 
@@ -99,62 +70,54 @@ export async function POST(request: NextRequest) {
 
     if (!/^\d{6}$/.test(finalPin.trim())) {
       return NextResponse.json(
-        { error: 'Please enter a valid 6-digit Indian PIN code' },
+        { error: 'PIN Code must be exactly 6 numeric digits' },
         { status: 400 }
       );
     }
 
-    const saved = await saveFirestoreAddress(
-      userId,
+    const saved = await saveAddress(
+      verifiedUser.uid,
       {
-        fullName: finalName,
-        phone: finalPhone,
-        addressLine1: finalLine1,
-        addressLine2: finalLine2,
-        city: finalCity,
-        state: finalState,
-        pinCode: finalPin,
-        country: finalCountry,
+        fullName: finalName.trim(),
+        phone: finalPhone.trim(),
+        addressLine1: finalLine1.trim(),
+        addressLine2: finalLine2.trim(),
+        city: finalCity.trim(),
+        state: finalState.trim(),
+        pinCode: finalPin.trim(),
+        country: finalCountry.trim(),
+        isDefault: !!isDefault,
       },
       id
     );
 
-    // Also persist in Prisma if available
-    try {
-      await prisma.address.create({
-        data: {
-          id: saved.id,
-          userId,
-          name: finalName,
-          phone: finalPhone,
-          line1: finalLine1,
-          line2: finalLine2 || null,
-          city: finalCity,
-          state: finalState,
-          pincode: finalPin,
-          country: finalCountry,
-        },
-      });
-    } catch {
-      // ignore prisma fallback error
-    }
-
-    return NextResponse.json({ address: saved, success: true });
+    return NextResponse.json({
+      success: true,
+      address: {
+        id: saved._id?.toString(),
+        userId: saved.firebaseUid,
+        firebaseUid: saved.firebaseUid,
+        fullName: saved.fullName,
+        phone: saved.phone,
+        addressLine1: saved.addressLine1,
+        addressLine2: saved.addressLine2,
+        city: saved.city,
+        state: saved.state,
+        pinCode: saved.pinCode,
+        country: saved.country,
+        isDefault: saved.isDefault,
+        createdAt: saved.createdAt?.toISOString(),
+        updatedAt: saved.updatedAt?.toISOString(),
+      },
+    });
   } catch (err) {
-    console.error('Error saving address:', err);
-    return NextResponse.json({ error: 'Failed to save address' }, { status: 500 });
+    return handleAuthError(err);
   }
 }
 
 export async function DELETE(request: NextRequest) {
   try {
-    const session = await getServerSession(authOptions);
-    const userId = session?.user?.id;
-
-    if (!userId) {
-      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
-    }
-
+    const verifiedUser = await requireFirebaseUser(request);
     const { searchParams } = new URL(request.url);
     const addressId = searchParams.get('id');
 
@@ -162,19 +125,13 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Address ID is required' }, { status: 400 });
     }
 
-    await deleteFirestoreAddress(addressId, userId);
-
-    try {
-      await prisma.address.delete({
-        where: { id: addressId },
-      });
-    } catch {
-      // ignore prisma fallback error
+    const deleted = await deleteAddress(addressId, verifiedUser.uid);
+    if (!deleted) {
+      return NextResponse.json({ error: 'Address not found or unauthorized' }, { status: 404 });
     }
 
-    return NextResponse.json({ success: true });
+    return NextResponse.json({ success: true, message: 'Address removed' });
   } catch (err) {
-    console.error('Error deleting address:', err);
-    return NextResponse.json({ error: 'Failed to delete address' }, { status: 500 });
+    return handleAuthError(err);
   }
 }

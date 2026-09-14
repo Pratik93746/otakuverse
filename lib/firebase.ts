@@ -17,7 +17,6 @@ import {
   ConfirmationResult,
 } from 'firebase/auth';
 import { getAnalytics, isSupported, Analytics } from 'firebase/analytics';
-import { getFirestore, Firestore } from 'firebase/firestore';
 
 export const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY || 'AIzaSyAxbMtQKuTqUOndhEfkykmYmidgBTSjjME',
@@ -33,7 +32,6 @@ export const isFirebaseConfigured = true;
 
 let app: FirebaseApp;
 let auth: Auth;
-let db: Firestore;
 let googleProvider: GoogleAuthProvider;
 let analytics: Analytics | null = null;
 
@@ -44,7 +42,6 @@ if (!getApps().length) {
 }
 
 auth = getAuth(app);
-db = getFirestore(app);
 googleProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
@@ -59,8 +56,8 @@ if (typeof window !== 'undefined') {
   });
 }
 
-export { app, auth, db, googleProvider, analytics, onAuthStateChanged, signInAnonymously, RecaptchaVerifier };
-export type { FirebaseUser, ConfirmationResult, Firestore };
+export { app, auth, googleProvider, analytics, onAuthStateChanged, signInAnonymously, RecaptchaVerifier };
+export type { FirebaseUser, ConfirmationResult };
 
 /**
  * Sign in anonymously to ensure every guest collector has an authentic Firebase UID

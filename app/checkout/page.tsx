@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useCartStore } from '@/store/cart';
 import { useSession } from 'next-auth/react';
+import { fetchWithAuth } from '@/lib/api-client';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Check,
@@ -132,10 +133,10 @@ export default function CheckoutPage() {
     }
   }, [session]);
 
-  // Fetch saved addresses from API/Firestore
+  // Fetch saved addresses from API/MongoDB
   useEffect(() => {
     if (session?.user) {
-      fetch('/api/addresses')
+      fetchWithAuth('/api/addresses')
         .then((res) => res.json())
         .then((data) => {
           if (data.addresses && Array.isArray(data.addresses) && data.addresses.length > 0) {
@@ -210,9 +211,8 @@ export default function CheckoutPage() {
 
     setLoading(true);
     try {
-      const res = await fetch('/api/orders', {
+      const res = await fetchWithAuth('/api/orders', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           items: items.map((i) => ({
             productId: i.productId,
@@ -279,9 +279,8 @@ export default function CheckoutPage() {
         theme: { color: '#E63329' },
         handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
           try {
-            await fetch('/api/orders/verify-payment', {
+            await fetchWithAuth('/api/orders/verify-payment', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 razorpayPaymentId: response.razorpay_payment_id,
                 razorpayOrderId: response.razorpay_order_id,

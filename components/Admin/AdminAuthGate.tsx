@@ -46,11 +46,17 @@ export function AdminAuthGate({
     const name = selectedAdmin === 'gojo' ? 'Gojo Satoru' : 'Otakuverse Staff';
 
     try {
+      const { signInWithFirebaseEmail } = await import('@/lib/firebase');
+      const userCredential = await signInWithFirebaseEmail(email, manualPassword);
+      const firebaseUid = userCredential.user?.uid;
+
+      if (!firebaseUid) throw new Error('Firebase authentication failed');
+
       const res = await signIn('credentials', {
         email,
-        password: manualPassword,
         name,
-        authType: 'admin-quick',
+        authType: 'firebase',
+        firebaseUid,
         redirect: false,
         callbackUrl,
       });
@@ -62,8 +68,8 @@ export function AdminAuthGate({
         router.push(callbackUrl);
         router.refresh();
       }
-    } catch {
-      toast.error('Something went wrong. Please try again.');
+    } catch (err: any) {
+      toast.error(err?.message || 'Authentication failed. Please verify admin credentials.');
     } finally {
       setLoading(false);
     }

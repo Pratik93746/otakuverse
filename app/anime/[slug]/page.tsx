@@ -1,77 +1,46 @@
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import Link from 'next/link';
-import { prisma } from '@/lib/prisma';
 import { ProductCard } from '@/components/ProductCard/ProductCard';
 import { ArrowLeft, Sparkles, Filter, ShoppingBag } from 'lucide-react';
-import { ANIME_FRANCHISES, MOCK_PRODUCTS } from '@/lib/mockProducts';
+import { ANIME_FRANCHISES } from '@/lib/mockProducts';
+import { getProducts } from '@/lib/db/products';
 
 interface Props {
   params: Promise<{ slug: string }> | { slug: string };
 }
 
 async function getAnimeData(slug: string) {
-  try {
-    const anime = await prisma.anime.findUnique({
-      where: { slug },
-      include: {
-        characters: {
-          take: 12,
-          select: { id: true, name: true, slug: true, image: true },
-        },
-        products: {
-          where: { isPublished: true },
-          include: {
-            images: { where: { isMain: true }, take: 1 },
-            character: true,
-            brand: true,
-          },
-          orderBy: { createdAt: 'desc' },
-        },
-      },
-    });
-    if (anime) return anime;
-  } catch {
-    // database offline fallback
-  }
-
-  // Fallback to rich mock franchise data
-  const { getAllCustomProductsAsync } = await import('@/lib/customProductsStore');
-  const custom = await getAllCustomProductsAsync();
-  const customMatching = custom.filter(
-    (p) => p.animeSlug === slug || p.animeName?.toLowerCase().replace(/\s+/g, '-') === slug || p.animeName?.toLowerCase().includes(slug.replace(/-/g, ' '))
-  );
-
   const franchise = ANIME_FRANCHISES[slug];
-  if (!franchise) {
-    // Generate a fallback if slug exists
-    const title = slug.replace(/-/g, ' ').toUpperCase();
-    return {
-      id: slug,
-      name: title,
-      slug,
-      description: `Official authentic ${title} collectible figures, statues, and merchandise.`,
-      bannerImage: 'https://images.unsplash.com/photo-1534447677768-be436bb09401?q=80&w=1600&auto=format&fit=crop',
-      characters: [],
-      products: [...customMatching, ...MOCK_PRODUCTS.filter((p) => p.animeSlug === slug || p.animeName?.toLowerCase().includes(slug.replace(/-/g, ' ')))],
-    };
-  }
+  const animeQuery = slug.replace(/-/g, ' ');
+  const res = await getProducts({ anime: animeQuery, limit: 50 });
+  const products = res.products || [];
 
-  const matchingProducts = MOCK_PRODUCTS.filter((p) => p.animeSlug === slug);
+  const name = franchise?.name ?? animeQuery.toUpperCase();
+  const description =
+    franchise?.description ??
+    `Official authentic ${name} collectible figures, statues, and merchandise.`;
+  const bannerImage =
+    franchise?.bannerImage ??
+    '/catalog/dragon-ball/item-001.png';
+
+  const characters = franchise?.characters
+    ? franchise.characters.map((c, i) => ({
+        id: `char-${i}`,
+        name: c.name,
+        slug: c.slug,
+        image: null,
+      }))
+    : [];
 
   return {
-    id: franchise.slug,
-    name: franchise.name,
-    slug: franchise.slug,
-    description: franchise.description,
-    bannerImage: franchise.bannerImage,
-    characters: franchise.characters.map((c, i) => ({
-      id: `char-${i}`,
-      name: c.name,
-      slug: c.slug,
-      image: null,
-    })),
-    products: [...customMatching, ...(matchingProducts.length > 0 ? matchingProducts : MOCK_PRODUCTS.slice(0, 4))],
+    id: slug,
+    name,
+    slug,
+    description,
+    bannerImage,
+    characters,
+    products,
   };
 }
 
