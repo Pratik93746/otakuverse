@@ -1,38 +1,66 @@
 import { MongoClient, Db, Collection, Document } from 'mongodb';
 
-const uri = process.env.MONGODB_URI || '';
-export const isPlaceholderUri = !uri || uri.includes('<username>') || uri.includes('cluster.mongodb.net');
+const rawUri = (process.env.MONGODB_URI || '').trim().replace(/^["']|["']$/g, '');
+const isPlaceholder =
+  !rawUri ||
+  rawUri.includes('<username>') ||
+  rawUri.includes('<password>') ||
+  rawUri.includes('your-username') ||
+  (rawUri.includes('@cluster.mongodb.net') && !rawUri.includes('cluster0'));
+
+export const isPlaceholderUri = isPlaceholder;
 
 const options = {
   maxPoolSize: 10,
   serverSelectionTimeoutMS: 5000,
 };
 
-let client: MongoClient;
-let clientPromise: Promise<MongoClient>;
+let client: MongoClient | null = null;
+let clientPromise: Promise<MongoClient> | null = null;
 
 declare global {
   // eslint-disable-next-line no-var
   var _mongoClientPromise: Promise<MongoClient> | undefined;
 }
 
-if (isPlaceholderUri) {
-  console.warn('⚠️ [MongoDB] MONGODB_URI is not set or contains placeholder credentials.');
-  clientPromise = Promise.reject(new Error('MONGODB_URI contains placeholder credentials.')).catch((e) => {
-    // Avoid unhandled rejection warning
-    return null as any;
-  });
-} else if (process.env.NODE_ENV === 'development') {
-  // In development mode, use a global variable so the MongoClient is not repeated
-  if (!global._mongoClientPromise) {
-    client = new MongoClient(uri, options);
-    global._mongoClientPromise = client.connect();
+function initMongoClient(): Promise<MongoClient> {
+  const currentUri = (process.env.MONGODB_URI || '').trim().replace(/^["']|["']$/g, '');
+
+  if (!currentUri) {
+    throw new Error(
+      'MONGODB_URI is not set in environment variables. Please add MONGODB_URI to your Vercel Project Settings (Settings -> Environment Variables) and redeploy.'
+    );
   }
-  clientPromise = global._mongoClientPromise;
-} else {
-  // In production mode, it's best to not use a global variable.
-  client = new MongoClient(uri, options);
-  clientPromise = client.connect();
+
+  if (
+    currentUri.includes('<username>') ||
+    currentUri.includes('<password>') ||
+    currentUri.includes('your-username')
+  ) {
+    throw new Error('MONGODB_URI is not configured with valid MongoDB Atlas credentials.');
+  }
+
+  if (process.env.NODE_ENV === 'development') {
+    if (!global._mongoClientPromise) {
+      client = new MongoClient(currentUri, options);
+      global._mongoClientPromise = client.connect();
+    }
+    return global._mongoClientPromise;
+  }
+
+  if (!clientPromise) {
+    client = new MongoClient(currentUri, options);
+    clientPromise = client.connect();
+  }
+  return clientPromise;
+}
+
+if (!isPlaceholder && typeof window === 'undefined') {
+  try {
+    initMongoClient();
+  } catch {
+    // Handled during runtime calls
+  }
 }
 
 export const DB_NAME = 'otakuverse';
@@ -41,14 +69,7 @@ export const DB_NAME = 'otakuverse';
  * Get MongoClient connected instance promise
  */
 export async function getMongoClient(): Promise<MongoClient> {
-  if (isPlaceholderUri) {
-    throw new Error('MONGODB_URI is not configured with valid MongoDB Atlas credentials.');
-  }
-  const connected = await clientPromise;
-  if (!connected) {
-    throw new Error('Could not connect to MongoDB Atlas.');
-  }
-  return connected;
+  return initMongoClient();
 }
 
 /**
