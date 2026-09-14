@@ -68,9 +68,23 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    if (!/^\d{6}$/.test(finalPin.trim())) {
+    if (!/^[6-9]\d{9}$/.test(finalPhone.trim().replace(/\D/g, ''))) {
       return NextResponse.json(
-        { error: 'PIN Code must be exactly 6 numeric digits' },
+        { error: 'Phone number must be a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9' },
+        { status: 400 }
+      );
+    }
+
+    if (!/^[1-9]\d{5}$/.test(finalPin.trim().replace(/\D/g, ''))) {
+      return NextResponse.json(
+        { error: 'PIN Code must be a valid 6-digit Indian postal PIN code starting with 1-9' },
+        { status: 400 }
+      );
+    }
+
+    if (finalLine1.trim().length < 5) {
+      return NextResponse.json(
+        { error: 'Street address must be at least 5 characters long' },
         { status: 400 }
       );
     }

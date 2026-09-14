@@ -25,6 +25,7 @@ import {
   Sparkles,
   PackageCheck,
   ShoppingBag,
+  Navigation,
 } from 'lucide-react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -49,13 +50,57 @@ interface AddressForm {
 }
 
 const indianStates = [
-  'Andhra Pradesh', 'Arunachal Pradesh', 'Assam', 'Bihar', 'Chhattisgarh',
-  'Delhi', 'Goa', 'Gujarat', 'Haryana', 'Himachal Pradesh', 'Jharkhand',
-  'Karnataka', 'Kerala', 'Madhya Pradesh', 'Maharashtra', 'Manipur',
-  'Meghalaya', 'Mizoram', 'Nagaland', 'Odisha', 'Punjab', 'Rajasthan',
-  'Sikkim', 'Tamil Nadu', 'Telangana', 'Tripura', 'Uttar Pradesh',
-  'Uttarakhand', 'West Bengal',
+  'Andaman and Nicobar Islands',
+  'Andhra Pradesh',
+  'Arunachal Pradesh',
+  'Assam',
+  'Bihar',
+  'Chandigarh',
+  'Chhattisgarh',
+  'Dadra and Nagar Haveli and Daman and Diu',
+  'Delhi',
+  'Goa',
+  'Gujarat',
+  'Haryana',
+  'Himachal Pradesh',
+  'Jammu and Kashmir',
+  'Jharkhand',
+  'Karnataka',
+  'Kerala',
+  'Ladakh',
+  'Lakshadweep',
+  'Madhya Pradesh',
+  'Maharashtra',
+  'Manipur',
+  'Meghalaya',
+  'Mizoram',
+  'Nagaland',
+  'Odisha',
+  'Puducherry',
+  'Punjab',
+  'Rajasthan',
+  'Sikkim',
+  'Tamil Nadu',
+  'Telangana',
+  'Tripura',
+  'Uttar Pradesh',
+  'Uttarakhand',
+  'West Bengal',
 ];
+
+export const isValidIndianPhone = (phone: string): boolean => {
+  const clean = (phone || '').replace(/\D/g, '');
+  return /^[6-9]\d{9}$/.test(clean) && !/^([0-9])\1{9}$/.test(clean);
+};
+
+export const isValidIndianPincode = (pincode: string): boolean => {
+  const clean = (pincode || '').replace(/\D/g, '');
+  return /^[1-9]\d{5}$/.test(clean);
+};
+
+export const isValidLocation = (line1: string, city: string): boolean => {
+  return (line1 || '').trim().length >= 5 && (city || '').trim().length >= 2;
+};
 
 export default function CheckoutPage() {
   const [mounted, setMounted] = useState(false);
@@ -70,6 +115,14 @@ export default function CheckoutPage() {
   const [showNewAddressForm, setShowNewAddressForm] = useState(false);
   const [saveForFuture, setSaveForFuture] = useState(true);
 
+  // Current location & pincode validation states
+  const [detectingLocation, setDetectingLocation] = useState(false);
+  const [pincodeStatus, setPincodeStatus] = useState<{
+    loading: boolean;
+    valid: boolean | null;
+    message: string;
+  }>({ loading: false, valid: null, message: '' });
+
   const [customerInfo, setCustomerInfo] = useState({
     email: session?.user?.email ?? '',
     firstName: session?.user?.name ? session.user.name.split(' ')[0] : '',
@@ -83,7 +136,7 @@ export default function CheckoutPage() {
     line1: '',
     line2: '',
     city: '',
-    state: 'Maharashtra',
+    state: 'Delhi',
     pincode: '',
   });
 
@@ -190,21 +243,170 @@ export default function CheckoutPage() {
     }
   };
 
+  const verifyPincode = async (code: string) => {
+    const clean = (code || '').replace(/\D/g, '');
+    if (!/^[1-9]\d{5}$/.test(clean)) {
+      setPincodeStatus({ loading: false, valid: false, message: 'Must be a 6-digit Indian PIN (e.g. 110001)' });
+      return;
+    }
+
+    setPincodeStatus({ loading: true, valid: null, message: 'Checking PIN code with postal database...' });
+    try {
+      const res = await fetch(`/api/pincode/${clean}`);
+      const data = await res.json();
+      if (res.ok && data.valid) {
+        setPincodeStatus({
+          loading: false,
+          valid: true,
+          message: data.message || `Verified: ${data.city || ''}, ${data.state || ''}`,
+        });
+
+        // Auto-fill City & State if available and improve state matching
+        setAddress((prev) => {
+          const nextCity = prev.city.trim() ? prev.city : (data.city || data.district || '');
+          let nextState = prev.state;
+          if (data.state) {
+            const matched = indianStates.find(
+              (s) => s.toLowerCase() === data.state.toLowerCase()
+            ) || indianStates.find(
+              (s) => s.toLowerCase().includes(data.state.toLowerCase()) || data.state.toLowerCase().includes(s.toLowerCase())
+            );
+            if (matched) nextState = matched;
+          }
+          return {
+            ...prev,
+            pincode: clean,
+            city: nextCity || prev.city,
+            state: nextState,
+          };
+        });
+      } else {
+        setPincodeStatus({
+          loading: false,
+          valid: false,
+          message: data.message || 'Invalid Indian PIN code',
+        });
+      }
+    } catch {
+      setPincodeStatus({
+        loading: false,
+        valid: true,
+        message: 'Valid 6-digit PIN code format',
+      });
+    }
+  };
+
+  const handleUseCurrentLocation = async () => {
+    if (typeof window === 'undefined' || !navigator.geolocation) {
+      toast.error('Location service is not supported by your browser.');
+      return;
+    }
+
+    setDetectingLocation(true);
+    const toastId = toast.loading('Detecting your GPS location...');
+
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        try {
+          const { latitude, longitude } = position.coords;
+          const res = await fetch(`/api/geocode/reverse?lat=${latitude}&lon=${longitude}`);
+          const data = await res.json();
+
+          if (res.ok && data.success && data.address) {
+            const geo = data.address;
+
+            // Match state against Indian states list
+            let matchedState = address.state;
+            if (geo.state) {
+              const found = indianStates.find(
+                (s) => s.toLowerCase() === geo.state.toLowerCase()
+              ) || indianStates.find(
+                (s) => s.toLowerCase().includes(geo.state.toLowerCase()) || geo.state.toLowerCase().includes(s.toLowerCase())
+              );
+              if (found) matchedState = found;
+            }
+
+            setAddress((prev) => ({
+              ...prev,
+              line1: geo.line1 || prev.line1,
+              city: geo.city || prev.city,
+              state: matchedState,
+              pincode: geo.pincode || prev.pincode,
+            }));
+
+            setSelectedSavedAddrIndex(null);
+            setShowNewAddressForm(true);
+
+            toast.success(
+              `Location auto-detected: ${geo.city || 'Detected'}, ${matchedState}!`,
+              { id: toastId }
+            );
+
+            if (geo.pincode && /^[1-9]\d{5}$/.test(geo.pincode)) {
+              verifyPincode(geo.pincode);
+            }
+          } else {
+            toast.error('Could not determine exact street address. Please type it in manually.', {
+              id: toastId,
+            });
+          }
+        } catch {
+          toast.error('Failed to geocode location. Please fill manually.', { id: toastId });
+        } finally {
+          setDetectingLocation(false);
+        }
+      },
+      (error) => {
+        setDetectingLocation(false);
+        if (error.code === error.PERMISSION_DENIED) {
+          toast.error('Location permission was denied. Please fill in your address manually.', {
+            id: toastId,
+          });
+        } else if (error.code === error.TIMEOUT) {
+          toast.error('Location request timed out. Please fill in your address manually.', {
+            id: toastId,
+          });
+        } else {
+          toast.error('Unable to fetch GPS location. Please fill in manually.', {
+            id: toastId,
+          });
+        }
+      },
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+    );
+  };
+
   const handleSelectSavedAddress = (index: number) => {
     setSelectedSavedAddrIndex(index);
     setAddress(savedAddresses[index]);
     setShowNewAddressForm(false);
+    if (savedAddresses[index]?.pincode) {
+      verifyPincode(savedAddresses[index].pincode);
+    }
   };
 
   const placeOrder = async () => {
-    if (!address.pincode || !/^\d{6}$/.test(address.pincode.trim())) {
-      toast.error('Please provide a valid 6-digit Indian PIN code');
+    const contactPhone = customerInfo.phone || address.phone;
+    if (!isValidIndianPhone(contactPhone)) {
+      toast.error('Please provide a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9');
+      setStep(0);
+      return;
+    }
+
+    if (!isValidIndianPincode(address.pincode)) {
+      toast.error('Please provide a valid 6-digit Indian PIN code (e.g. 110001, 400001)');
       setStep(1);
       return;
     }
 
-    if (!address.name || !address.phone || !address.line1 || !address.city) {
-      toast.error('Please fill in all required delivery address fields');
+    if (!isValidLocation(address.line1, address.city)) {
+      toast.error('Please fill in a valid street address (min 5 characters) and city (min 2 characters)');
+      setStep(1);
+      return;
+    }
+
+    if (!address.name || !address.name.trim()) {
+      toast.error('Recipient name is required');
       setStep(1);
       return;
     }
@@ -501,33 +703,62 @@ export default function CheckoutPage() {
                     </div>
 
                     <div>
-                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5">
-                        Mobile Number <span className="text-brand-red">*</span>
+                      <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1.5 flex items-center justify-between">
+                        <span>Mobile Number <span className="text-brand-red">*</span></span>
+                        {customerInfo.phone && (
+                          isValidIndianPhone(customerInfo.phone) ? (
+                            <span className="text-[11px] font-semibold text-emerald-600 flex items-center gap-1">
+                              <Check className="w-3 h-3" /> Valid 10-digit number
+                            </span>
+                          ) : (
+                            <span className="text-[11px] font-semibold text-red-500">
+                              Must be 10 digits starting with 6, 7, 8, or 9
+                            </span>
+                          )
+                        )}
                       </label>
                       <div className="flex">
                         <span className="inline-flex items-center px-3.5 bg-gray-100 border border-r-0 border-gray-300 text-xs font-bold text-gray-600 rounded-l-sm">
                           +91
                         </span>
                         <input
-                          className="input-base w-full rounded-l-none"
-                          placeholder="9876543210"
+                          className={`input-base w-full rounded-l-none ${
+                            customerInfo.phone && !isValidIndianPhone(customerInfo.phone)
+                              ? 'border-red-400 focus:border-red-500'
+                              : customerInfo.phone && isValidIndianPhone(customerInfo.phone)
+                              ? 'border-emerald-400 focus:border-emerald-500'
+                              : ''
+                          }`}
+                          placeholder="10-digit mobile number (e.g. 9876543210)"
                           type="tel"
                           maxLength={10}
                           value={customerInfo.phone}
-                          onChange={(e) => setCustomerInfo({ ...customerInfo, phone: e.target.value.replace(/\D/g, '') })}
+                          onChange={(e) => {
+                            const val = e.target.value.replace(/\D/g, '').slice(0, 10);
+                            setCustomerInfo({ ...customerInfo, phone: val });
+                            if (!address.phone) {
+                              setAddress((prev) => ({ ...prev, phone: val }));
+                            }
+                          }}
                           required
                         />
                       </div>
                       <p className="text-[11px] text-gray-400 mt-1">
-                        Used for courier dispatch notifications and OTP verification
+                        Used for courier dispatch notifications and OTP verification (10 digits starting with 6, 7, 8, or 9)
                       </p>
                     </div>
                   </div>
 
                   <div className="pt-6 border-t border-gray-100 mt-6 flex justify-end">
                     <button
-                      onClick={() => setStep(1)}
-                      disabled={!customerInfo.email || !customerInfo.firstName || !customerInfo.phone}
+                      onClick={() => {
+                        if (!isValidIndianPhone(customerInfo.phone)) {
+                          toast.error('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9');
+                          return;
+                        }
+                        setStep(1);
+                      }}
+                      disabled={!customerInfo.email || !customerInfo.firstName || !isValidIndianPhone(customerInfo.phone)}
                       className="btn-primary px-8 py-3 text-xs tracking-wider font-bold disabled:opacity-50 flex items-center gap-2"
                     >
                       <span>Continue to Address</span>
@@ -624,11 +855,29 @@ export default function CheckoutPage() {
                   {/* Manual / New Address Form */}
                   {(showNewAddressForm || savedAddresses.length === 0) && (
                     <div className="space-y-4 bg-gray-50/60 p-5 border border-gray-200 rounded-sm mb-6">
-                      <div className="flex items-center gap-2 mb-2">
-                        <Building className="w-4 h-4 text-brand-red" />
-                        <h3 className="font-heading text-lg tracking-wider uppercase text-gray-900">
-                          Address Details
-                        </h3>
+                      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-3 border-b border-gray-200/80 mb-2">
+                        <div className="flex items-center gap-2">
+                          <Building className="w-4 h-4 text-brand-red" />
+                          <h3 className="font-heading text-lg tracking-wider uppercase text-gray-900">
+                            Delivery Address
+                          </h3>
+                        </div>
+
+                        {/* Use Current Location Button */}
+                        <button
+                          type="button"
+                          onClick={handleUseCurrentLocation}
+                          disabled={detectingLocation}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 text-white text-xs font-bold rounded shadow-xs hover:shadow transition-all disabled:opacity-60 cursor-pointer self-start sm:self-auto group"
+                          title="Auto-detect and fill your current location via GPS"
+                        >
+                          {detectingLocation ? (
+                            <Loader2 className="w-3.5 h-3.5 animate-spin" />
+                          ) : (
+                            <Navigation className="w-3.5 h-3.5 group-hover:scale-110 transition-transform" />
+                          )}
+                          <span>{detectingLocation ? 'Detecting GPS...' : 'Use Current Location'}</span>
+                        </button>
                       </div>
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -638,7 +887,7 @@ export default function CheckoutPage() {
                           </label>
                           <input
                             className="input-base w-full bg-white"
-                            placeholder="Full name"
+                            placeholder="Full name (e.g. Satoru Gojo)"
                             value={address.name}
                             onChange={(e) => {
                               setSelectedSavedAddrIndex(null);
@@ -648,22 +897,39 @@ export default function CheckoutPage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
-                            Contact Phone Number <span className="text-brand-red">*</span>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1 flex items-center justify-between">
+                            <span>Contact Phone <span className="text-brand-red">*</span></span>
+                            {address.phone && (
+                              isValidIndianPhone(address.phone) ? (
+                                <span className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1">
+                                  <Check className="w-3 h-3" /> Valid
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-semibold text-red-500">
+                                  10 digits (6-9 start)
+                                </span>
+                              )
+                            )}
                           </label>
                           <div className="flex">
                             <span className="inline-flex items-center px-3 bg-gray-100 border border-r-0 border-gray-300 text-xs font-bold text-gray-600 rounded-l-sm">
                               +91
                             </span>
                             <input
-                              className="input-base w-full bg-white rounded-l-none"
+                              className={`input-base w-full bg-white rounded-l-none ${
+                                address.phone && !isValidIndianPhone(address.phone)
+                                  ? 'border-red-400 focus:border-red-500'
+                                  : address.phone && isValidIndianPhone(address.phone)
+                                  ? 'border-emerald-400 focus:border-emerald-500'
+                                  : ''
+                              }`}
                               placeholder="10-digit mobile number"
                               type="tel"
                               maxLength={10}
                               value={address.phone}
                               onChange={(e) => {
                                 setSelectedSavedAddrIndex(null);
-                                setAddress({ ...address, phone: e.target.value.replace(/\D/g, '') });
+                                setAddress({ ...address, phone: e.target.value.replace(/\D/g, '').slice(0, 10) });
                               }}
                               required
                             />
@@ -672,12 +938,19 @@ export default function CheckoutPage() {
                       </div>
 
                       <div>
-                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
-                          Street Address / House No. / Flat <span className="text-brand-red">*</span>
+                        <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1 flex items-center justify-between">
+                          <span>Street Address / House No. / Flat <span className="text-brand-red">*</span></span>
+                          {address.line1 && address.line1.trim().length < 5 && (
+                            <span className="text-[10px] font-medium text-amber-600">
+                              Min 5 characters ({address.line1.trim().length}/5)
+                            </span>
+                          )}
                         </label>
                         <input
-                          className="input-base w-full bg-white"
-                          placeholder="e.g. Flat 402, Sakura Residency, MG Road"
+                          className={`input-base w-full bg-white ${
+                            address.line1 && address.line1.trim().length < 5 ? 'border-amber-300' : ''
+                          }`}
+                          placeholder="e.g. Flat 402, Sakura Residency, MG Road (min 5 characters)"
                           value={address.line1}
                           onChange={(e) => {
                             setSelectedSavedAddrIndex(null);
@@ -704,8 +977,11 @@ export default function CheckoutPage() {
 
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                         <div>
-                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
-                            City / District <span className="text-brand-red">*</span>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1 flex items-center justify-between">
+                            <span>City / District <span className="text-brand-red">*</span></span>
+                            {address.city && address.city.trim().length < 2 && (
+                              <span className="text-[10px] text-amber-600">Min 2 characters</span>
+                            )}
                           </label>
                           <input
                             className="input-base w-full bg-white"
@@ -719,25 +995,65 @@ export default function CheckoutPage() {
                           />
                         </div>
                         <div>
-                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1">
-                            PIN Code (6 Digits) <span className="text-brand-red">*</span>
+                          <label className="block text-xs font-bold uppercase tracking-wider text-gray-700 mb-1 flex items-center justify-between">
+                            <span>PIN Code (6 Digits) <span className="text-brand-red">*</span></span>
+                            {pincodeStatus.loading && (
+                              <span className="text-[10px] font-medium text-blue-600 flex items-center gap-1">
+                                <Loader2 className="w-2.5 h-2.5 animate-spin" /> Verifying...
+                              </span>
+                            )}
+                            {!pincodeStatus.loading && pincodeStatus.valid === true && (
+                              <span className="text-[10px] font-semibold text-emerald-600 flex items-center gap-1">
+                                <Check className="w-3 h-3" /> Valid PIN
+                              </span>
+                            )}
+                            {!pincodeStatus.loading && pincodeStatus.valid === false && (
+                              <span className="text-[10px] font-semibold text-red-500">
+                                Invalid PIN Code
+                              </span>
+                            )}
                           </label>
                           <div className="relative">
                             <input
-                              className="input-base w-full bg-white font-mono"
-                              placeholder="e.g. 400001"
+                              className={`input-base w-full bg-white font-mono ${
+                                pincodeStatus.valid === false
+                                  ? 'border-red-400 focus:border-red-500'
+                                  : pincodeStatus.valid === true
+                                  ? 'border-emerald-400 focus:border-emerald-500'
+                                  : ''
+                              }`}
+                              placeholder="e.g. 400001 (6 digits)"
                               maxLength={6}
                               value={address.pincode}
                               onChange={(e) => {
                                 setSelectedSavedAddrIndex(null);
-                                setAddress({ ...address, pincode: e.target.value.replace(/\D/g, '') });
+                                const val = e.target.value.replace(/\D/g, '').slice(0, 6);
+                                setAddress({ ...address, pincode: val });
+                                if (val.length === 6) {
+                                  verifyPincode(val);
+                                } else if (val.length > 0) {
+                                  setPincodeStatus({ loading: false, valid: null, message: '' });
+                                }
                               }}
                               required
                             />
-                            {address.pincode.length === 6 && (
+                            {pincodeStatus.valid === true && (
                               <Check className="w-4 h-4 text-green-600 absolute right-3 top-1/2 -translate-y-1/2" />
                             )}
                           </div>
+                          {pincodeStatus.message && (
+                            <p
+                              className={`text-[11px] mt-1 font-medium ${
+                                pincodeStatus.valid === false
+                                  ? 'text-red-500'
+                                  : pincodeStatus.valid === true
+                                  ? 'text-emerald-600'
+                                  : 'text-gray-500'
+                              }`}
+                            >
+                              {pincodeStatus.message}
+                            </p>
+                          )}
                         </div>
                       </div>
 
@@ -781,8 +1097,41 @@ export default function CheckoutPage() {
                       <ArrowLeft className="w-3.5 h-3.5" /> Back
                     </button>
                     <button
-                      onClick={() => setStep(2)}
-                      disabled={!address.name || !address.phone || !address.line1 || !address.city || address.pincode.length !== 6}
+                      onClick={() => {
+                        if (!address.name || !address.name.trim()) {
+                          toast.error('Please enter the recipient full name');
+                          return;
+                        }
+                        if (!isValidIndianPhone(address.phone)) {
+                          toast.error('Please enter a valid 10-digit Indian mobile number starting with 6, 7, 8, or 9');
+                          return;
+                        }
+                        if (!address.line1 || address.line1.trim().length < 5) {
+                          toast.error('Please enter a valid street address (minimum 5 characters)');
+                          return;
+                        }
+                        if (!address.city || address.city.trim().length < 2) {
+                          toast.error('Please enter a valid city or district');
+                          return;
+                        }
+                        if (!isValidIndianPincode(address.pincode)) {
+                          toast.error('Please enter a valid 6-digit Indian postal PIN code');
+                          return;
+                        }
+                        if (pincodeStatus.valid === false) {
+                          toast.error('Please enter a recognized Indian postal PIN code');
+                          return;
+                        }
+                        setStep(2);
+                      }}
+                      disabled={
+                        !address.name.trim() ||
+                        !isValidIndianPhone(address.phone) ||
+                        address.line1.trim().length < 5 ||
+                        address.city.trim().length < 2 ||
+                        !isValidIndianPincode(address.pincode) ||
+                        pincodeStatus.valid === false
+                      }
                       className="btn-primary px-8 py-3 text-xs font-bold tracking-wider disabled:opacity-50 flex items-center gap-2"
                     >
                       <span>Continue to Delivery</span>

@@ -38,8 +38,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'No items in order' }, { status: 400 });
     }
 
-    if (!address || !address.name || !address.line1 || !address.city || !address.pincode) {
-      return NextResponse.json({ error: 'Valid delivery address is required' }, { status: 400 });
+    if (!address || !address.name || !address.line1 || !address.city) {
+      return NextResponse.json({ error: 'Complete delivery address is required' }, { status: 400 });
+    }
+
+    const pin = (address.pincode || address.pinCode || '').trim().replace(/\D/g, '');
+    if (!/^[1-9]\d{5}$/.test(pin)) {
+      return NextResponse.json({ error: 'A valid 6-digit Indian postal PIN code is required' }, { status: 400 });
+    }
+
+    const orderPhone = (customerPhone || address.phone || '').trim().replace(/\D/g, '');
+    if (!/^[6-9]\d{9}$/.test(orderPhone)) {
+      return NextResponse.json({ error: 'A valid 10-digit Indian mobile number starting with 6, 7, 8, or 9 is required' }, { status: 400 });
+    }
+
+    if (address.line1.trim().length < 5) {
+      return NextResponse.json({ error: 'Delivery street address must be at least 5 characters long' }, { status: 400 });
+    }
+
+    if (address.city.trim().length < 2) {
+      return NextResponse.json({ error: 'Valid city name is required' }, { status: 400 });
     }
 
     // Ensure user profile in MongoDB
