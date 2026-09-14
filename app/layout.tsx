@@ -5,6 +5,7 @@ import { Providers } from '@/components/Providers';
 import { Header } from '@/components/Header/Header';
 import { Footer } from '@/components/Footer/Footer';
 import { CartDrawer } from '@/components/Cart/CartDrawer';
+import { WhatsAppButton } from '@/components/WhatsAppButton';
 import { Toaster } from 'react-hot-toast';
 
 export const viewport: Viewport = {
@@ -85,6 +86,7 @@ export default function RootLayout({
           <main className="min-h-screen">{children}</main>
           <Footer />
           <CartDrawer />
+          <WhatsAppButton />
           <Toaster
             position="top-right"
             toastOptions={{
