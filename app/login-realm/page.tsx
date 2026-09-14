@@ -544,7 +544,7 @@ function OlderLoginContent() {
       <header className="relative z-20 container-wide py-2.5 sm:py-3 flex items-center justify-between border-b border-white/[0.04]">
         <Link href="/" className="flex items-center gap-2 group">
           <span className="font-heading text-xl sm:text-2xl tracking-[0.18em] uppercase text-white font-black group-hover:text-brand-red transition-colors">
-            OTAKUVERSE
+            BAKA
           </span>
           <span
             className="text-[9px] font-bold px-1.5 py-0.5 rounded border transition-colors"
@@ -869,7 +869,7 @@ function OlderLoginContent() {
                         onFocus={() => setChibiState('email')}
                         onBlur={() => setChibiState('idle')}
                         required
-                        placeholder="hunter@otakuverse.com"
+                        placeholder="hunter@baka.style"
                         className="w-full bg-[#181726] border-2 border-white/20 hover:border-white/30 rounded-xl px-10 py-2.5 sm:py-3 text-sm text-white placeholder-gray-400 outline-none transition-all shadow-inner font-medium focus:bg-[#1E1D30] min-h-[44px]"
                         style={{
                           borderColor: chibiState === 'email' ? currentTheme.color : undefined,
@@ -932,7 +932,7 @@ function OlderLoginContent() {
                       </>
                     ) : (
                       <>
-                        Enter Otakuverse <ArrowRight className="w-4 h-4" />
+                        Enter BAKA <ArrowRight className="w-4 h-4" />
                       </>
                     )}
                   </button>
@@ -953,7 +953,7 @@ function OlderLoginContent() {
 
       {/* Compact Bottom Footer */}
       <footer className="relative z-10 text-center text-[10px] text-gray-600 py-1.5">
-        © 2026 OTAKUVERSE — Tokyo to India Authentic Figures
+        © 2026 BAKA — Tokyo to India Authentic Figures
       </footer>
     </div>
   );

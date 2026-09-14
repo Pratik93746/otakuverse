@@ -57,7 +57,7 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: AdminUserItem
               name: fbUser.displayName || userEmail.split('@')[0],
               email: fbUser.email!,
               phone: fbUser.phoneNumber || '',
-              role: userEmail === 'gojo@otakuverse.com' || userEmail === 'admin@otakuverse.in' ? 'ADMIN' : 'USER',
+              role: userEmail === 'gojo@baka.style' || userEmail === 'admin@baka.style' ? 'ADMIN' : 'USER',
               createdAt: new Date().toISOString(),
             };
             // Persist to backend
@@ -423,7 +423,7 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: AdminUserItem
                 </label>
                 <input
                   type="email"
-                  placeholder="e.g. collector@otakuverse.in"
+                  placeholder="e.g. collector@baka.style"
                   value={formEmail}
                   onChange={(e) => setFormEmail(e.target.value)}
                   className="w-full px-3 py-2.5 bg-gray-50 border border-gray-200 rounded-sm focus:bg-white focus:border-brand-red outline-none text-xs"

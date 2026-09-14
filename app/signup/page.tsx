@@ -75,7 +75,7 @@ export default function SignupPage() {
       if (res?.error) {
         toast.error('Could not complete registration. Please try logging in.');
       } else {
-        toast.success(`Welcome to OTAKUVERSE, ${name}! 🎌`);
+        toast.success(`Welcome to BAKA, ${name}! 🎌`);
         router.push('/');
         router.refresh();
       }
@@ -115,7 +115,7 @@ export default function SignupPage() {
         if (res?.error) {
           toast.error('Failed to create account with Google.');
         } else {
-          toast.success(`Welcome to OTAKUVERSE, ${fbUser.displayName || 'Hunter'}! 🎌`);
+          toast.success(`Welcome to BAKA, ${fbUser.displayName || 'Hunter'}! 🎌`);
           router.push('/');
           router.refresh();
         }
@@ -301,7 +301,7 @@ export default function SignupPage() {
                   className="mt-0.5 rounded border-gray-700 bg-white/5 text-brand-red focus:ring-0 accent-brand-red"
                 />
                 <span>
-                  I agree to OTAKUVERSE&apos;s{' '}
+                  I agree to BAKA&apos;s{' '}
                   <Link href="/terms" className="text-white hover:underline">Terms</Link> &{' '}
                   <Link href="/privacy" className="text-white hover:underline">Privacy Policy</Link>
                 </span>
@@ -356,7 +356,7 @@ export default function SignupPage() {
 
       {/* Footer */}
       <footer className="relative z-10 text-center text-[11px] text-gray-600">
-        © 2026 OTAKUVERSE — Authentic Anime Collectibles & Statues
+        © 2026 BAKA — Authentic Anime Collectibles & Statues
       </footer>
     </div>
   );

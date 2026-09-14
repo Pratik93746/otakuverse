@@ -25,7 +25,7 @@ async function getProduct(slug: string) {
       depth: 12,
       weight: 750,
       material: 'PVC + ABS',
-      manufacturer: p.brandName ?? 'OTAKUVERSE Exclusive',
+      manufacturer: p.brandName ?? 'BAKA Exclusive',
       edition: p.isLimitedEdition
         ? 'Limited Masterpiece Edition'
         : 'First Edition Authentic Release',
@@ -92,16 +92,16 @@ async function getProduct(slug: string) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const resolvedParams = await Promise.resolve(params);
   const product = await getProduct(resolvedParams.slug);
-  if (!product) return { title: 'Product Not Found | OTAKUVERSE' };
+  if (!product) return { title: 'Product Not Found | BAKA' };
 
   const mainImage = (product as any).images?.[0]?.url ?? (product as any).image;
 
   return {
-    title: (product as any).seoTitle ?? `${product.name} | OTAKUVERSE`,
+    title: (product as any).seoTitle ?? `${product.name} | BAKA`,
     description:
       (product as any).seoDescription ??
       product.description?.slice(0, 160) ??
-      `Buy ${product.name} from OTAKUVERSE`,
+      `Buy ${product.name} from BAKA`,
     openGraph: {
       title: product.name,
       description: product.description ?? '',

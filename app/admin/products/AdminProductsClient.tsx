@@ -181,7 +181,7 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
       };
 
       setProducts([created, ...products]);
-      toast.success('Figure Added to OTAKUVERSE Store & Catalog! 🎌');
+      toast.success('Figure Added to BAKA Store & Catalog! 🎌');
 
       // Reset form
       setFormName('');

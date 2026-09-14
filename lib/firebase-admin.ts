@@ -102,7 +102,7 @@ export async function requireFirebaseUser(request: NextRequest): Promise<Verifie
 export function isAllowedAdminEmail(email?: string | null): boolean {
   if (!email) return false;
   const clean = email.toLowerCase().trim();
-  const configuredAdmins = (process.env.ADMIN_EMAILS || 'gojo@otakuverse.com,admin@otakuverse.in')
+  const configuredAdmins = (process.env.ADMIN_EMAILS || 'gojo@otakuverse.com,admin@otakuverse.in,admin@baka.style,gojo@baka.style')
     .toLowerCase()
     .split(',')
     .map((e) => e.trim())

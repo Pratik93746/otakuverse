@@ -64,12 +64,12 @@ export async function POST(request: NextRequest) {
     let dbUser = await findUserByFirebaseUid(verifiedUser.uid);
     if (!dbUser) {
       dbUser = await upsertUser(verifiedUser.uid, {
-        email: verifiedUser.email || customerEmail || `${verifiedUser.uid}@collector.otakuverse.com`,
+        email: verifiedUser.email || customerEmail || `${verifiedUser.uid}@collector.baka.style`,
         name: customerName || verifiedUser.name || 'Collector',
       });
     }
 
-    const email = customerEmail || dbUser.email || verifiedUser.email || 'collector@otakuverse.com';
+    const email = customerEmail || dbUser.email || verifiedUser.email || 'collector@baka.style';
     const name = customerName || address.name || dbUser.name || 'Valued Collector';
     const phone = customerPhone || address.phone || dbUser.phone || '';
 

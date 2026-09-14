@@ -248,7 +248,7 @@ export function UserMenu() {
               <div className="flex items-center gap-2 mb-1">
                 <Sparkles className="w-4 h-4 text-yellow-400 animate-pulse" />
                 <span className="text-xs font-heading font-black uppercase tracking-wider text-white">
-                  OTAKUVERSE HUNTER PORTAL
+                  BAKA HUNTER PORTAL
                 </span>
               </div>
               <p className="text-[11px] text-gray-400 leading-tight">

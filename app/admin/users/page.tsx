@@ -55,7 +55,7 @@ export default async function AdminUsersPage() {
         name: u.name || existing?.name || emailKey.split('@')[0],
         email: emailKey,
         phone: u.phone || existing?.phone || '',
-        role: u.role || existing?.role || (emailKey === 'gojo@otakuverse.com' || emailKey === 'admin@otakuverse.in' ? 'ADMIN' : 'USER'),
+        role: u.role || existing?.role || (emailKey === 'gojo@baka.style' || emailKey === 'admin@baka.style' ? 'ADMIN' : 'USER'),
         createdAt: u.createdAt instanceof Date ? u.createdAt.toISOString() : (u.createdAt || existing?.createdAt || new Date().toISOString()),
       });
     }
@@ -73,7 +73,7 @@ export default async function AdminUsersPage() {
               <span className="bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider">
                 Admin Panel
               </span>
-              <span className="text-xs text-gray-500">OTAKUVERSE v1.0</span>
+              <span className="text-xs text-gray-500">BAKA v1.0</span>
             </div>
             <h1 className="font-heading text-3xl tracking-wide uppercase">
               REGISTERED COLLECTORS ({users.length})

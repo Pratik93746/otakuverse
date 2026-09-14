@@ -28,7 +28,7 @@ export function WhatsAppButton() {
             <div className="flex items-center gap-2">
               <div className="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse" />
               <span className="text-xs font-bold uppercase tracking-wider text-white">
-                OtakuVerse Support
+                BAKA Support
               </span>
             </div>
             <button
@@ -48,7 +48,7 @@ export function WhatsAppButton() {
             {contacts.map((c) => (
               <a
                 key={c.clean}
-                href={`https://wa.me/${c.clean}?text=Hi%20OtakuVerse!%20I%20have%20an%20inquiry%20regarding%20products%20or%20orders.`}
+                href={`https://wa.me/${c.clean}?text=Hi%20BAKA!%20I%20have%20an%20inquiry%20regarding%20products%20or%20orders.`}
                 target="_blank"
                 rel="noopener noreferrer"
                 onClick={() => setMenuOpen(false)}

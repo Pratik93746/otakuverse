@@ -10,7 +10,7 @@ export async function GET(request: NextRequest) {
     if (!user) {
       // Create user if missing
       user = await upsertUser(verifiedUser.uid, {
-        email: verifiedUser.email || `${verifiedUser.uid}@collector.otakuverse.com`,
+        email: verifiedUser.email || `${verifiedUser.uid}@collector.baka.style`,
         name: verifiedUser.name || verifiedUser.email?.split('@')[0] || 'Collector',
         image: verifiedUser.picture,
       });
@@ -30,7 +30,7 @@ export async function POST(request: NextRequest) {
     const { name, phone, image } = body;
 
     const updatedUser = await upsertUser(verifiedUser.uid, {
-      email: verifiedUser.email || `${verifiedUser.uid}@collector.otakuverse.com`,
+      email: verifiedUser.email || `${verifiedUser.uid}@collector.baka.style`,
       name,
       phone,
       image,

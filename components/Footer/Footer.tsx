@@ -78,7 +78,7 @@ export function Footer() {
                 <div className="flex flex-col gap-1">
                   <div className="flex flex-wrap items-center gap-1.5 font-mono text-gray-300">
                     <a
-                      href="https://wa.me/919871452380?text=Hi%20OtakuVerse!%20I%20have%20an%20inquiry%20regarding%20products%20or%20orders."
+                      href="https://wa.me/919871452380?text=Hi%20BAKA!%20I%20have%20an%20inquiry%20regarding%20products%20or%20orders."
                       target="_blank"
                       rel="noopener noreferrer"
                       className="hover:text-emerald-400 hover:underline transition-colors flex items-center gap-1"
@@ -88,7 +88,7 @@ export function Footer() {
                     </a>
                     <span className="text-gray-500">/</span>
                     <a
-                      href="https://wa.me/919971977012?text=Hi%20OtakuVerse!%20I%20have%20an%20inquiry%20regarding%20products%20or%20orders."
+                      href="https://wa.me/919971977012?text=Hi%20BAKA!%20I%20have%20an%20inquiry%20regarding%20products%20or%20orders."
                       target="_blank"
                       rel="noopener noreferrer"
                       className="hover:text-emerald-400 hover:underline transition-colors flex items-center gap-1"

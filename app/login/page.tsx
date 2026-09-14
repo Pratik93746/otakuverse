@@ -169,7 +169,7 @@ function LoginForm() {
         toast.error(errorMsg);
       } else {
         setErrorMessage(null);
-        toast.success('Access Granted! Welcome to OTAKUVERSE 🎌');
+        toast.success('Access Granted! Welcome to BAKA 🎌');
         router.push(callbackUrl);
         router.refresh();
       }
@@ -457,7 +457,7 @@ function LoginForm() {
 
             {/* Sign Up Link */}
             <div className="mt-6 text-center text-xs text-gray-400">
-              <span>New to Otakuverse? </span>
+              <span>New to BAKA? </span>
               <Link
                 href="/signup"
                 className="text-white font-bold hover:text-brand-red transition-colors underline underline-offset-4 ml-1"
@@ -530,7 +530,7 @@ function LoginForm() {
 
       {/* Footer */}
       <footer className="relative z-10 text-center text-[11px] text-gray-600 py-2">
-        © 2026 OTAKUVERSE — Authentic Anime Collectibles & Statues
+        © 2026 BAKA — Authentic Anime Collectibles & Statues
       </footer>
     </div>
   );

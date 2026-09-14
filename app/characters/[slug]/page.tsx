@@ -33,10 +33,10 @@ async function getCharacterData(slug: string) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await Promise.resolve(params);
   const char = await getCharacterData(slug);
-  if (!char) return { title: 'Character Not Found | OTAKUVERSE' };
+  if (!char) return { title: 'Character Not Found | BAKA' };
 
   return {
-    title: `${char.name} Figures & Statues | OTAKUVERSE`,
+    title: `${char.name} Figures & Statues | BAKA`,
     description: `Shop authentic ${char.name} (${char.anime?.name ?? 'Anime'}) collectible figures, statues and merch.`,
   };
 }

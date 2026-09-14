@@ -3,7 +3,7 @@ import type { Metadata } from 'next';
 import ShopClient from './ShopClient';
 
 export const metadata: Metadata = {
-  title: 'Shop All Anime Figures & Collectibles | OTAKUVERSE',
+  title: 'Shop All Anime Figures & Collectibles | BAKA',
   description:
     'Browse our complete collection of anime figures, statues, and collectibles. Filter by anime, character, brand, price, and more.',
 };

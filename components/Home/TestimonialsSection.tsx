@@ -29,7 +29,7 @@ const testimonials = [
     id: 3,
     rating: 5,
     review:
-      'I\'ve been collecting anime figures for 8 years and OTAKUVERSE is now my go-to store. Huge selection, authentic products, and the Gojo Satoru figure I got is the crown jewel of my collection.',
+      'I\'ve been collecting anime figures for 8 years and BAKA is now my go-to store. Huge selection, authentic products, and the Gojo Satoru figure I got is the crown jewel of my collection.',
     name: 'Rohit Verma',
     city: 'Delhi',
     purchase: 'Gojo Satoru Limited Figure',

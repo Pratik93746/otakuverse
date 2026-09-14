@@ -11,8 +11,8 @@ export async function generateMetadata({ params }: CollectionPageProps): Promise
   const { slug } = await Promise.resolve(params);
   const formatted = slug.replace(/-/g, ' ').toUpperCase();
   return {
-    title: `${formatted} Collection | OTAKUVERSE`,
-    description: `Shop premium ${formatted.toLowerCase()} anime figures and collectibles at OTAKUVERSE.`,
+    title: `${formatted} Collection | BAKA`,
+    description: `Shop premium ${formatted.toLowerCase()} anime figures and collectibles at BAKA.`,
   };
 }
 

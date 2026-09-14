@@ -5,7 +5,7 @@ import { User } from 'lucide-react';
 import { MOCK_PRODUCTS } from '@/lib/mockProducts';
 
 export const metadata: Metadata = {
-  title: 'All Anime Characters Vault | OTAKUVERSE',
+  title: 'All Anime Characters Vault | BAKA',
   description: 'Find official figures and statues by character: Goku, Luffy, Zoro, Gojo, Naruto, Sasuke, Tanjiro, Nezuko, Ichigo, Deku, and more.',
 };
 

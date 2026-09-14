@@ -38,7 +38,7 @@ export async function GET(req: NextRequest) {
         `https://nominatim.openstreetmap.org/reverse?lat=${latitude}&lon=${longitude}&format=json&addressdetails=1`,
         {
           headers: {
-            'User-Agent': 'OtakuVerse-ECommerce/1.0 (contact: support@otakuverse.in)',
+            'User-Agent': 'BAKA-ECommerce/1.0 (contact: support@baka.style)',
             'Accept-Language': 'en',
           },
           signal: controller.signal,

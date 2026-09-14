@@ -42,8 +42,8 @@ export function AdminAuthGate({
       return;
     }
     setLoading(true);
-    const email = selectedAdmin === 'gojo' ? 'gojo@otakuverse.com' : 'admin@otakuverse.in';
-    const name = selectedAdmin === 'gojo' ? 'Gojo Satoru' : 'Otakuverse Staff';
+    const email = selectedAdmin === 'gojo' ? 'gojo@baka.style' : 'admin@baka.style';
+    const name = selectedAdmin === 'gojo' ? 'Gojo Satoru' : 'BAKA Staff';
 
     try {
       const { signInWithFirebaseEmail } = await import('@/lib/firebase');
@@ -135,7 +135,7 @@ export function AdminAuthGate({
                 }`}
               >
                 <CheckCircle2 className={`w-3.5 h-3.5 ${selectedAdmin === 'staff' ? 'text-purple-400' : 'opacity-0'}`} />
-                <span>Otakuverse Staff</span>
+                <span>BAKA Staff</span>
               </button>
             </div>
           </div>
@@ -183,7 +183,7 @@ export function AdminAuthGate({
             className="text-xs text-gray-400 hover:text-white inline-flex items-center gap-1.5 transition-colors"
           >
             <ArrowLeft className="w-3.5 h-3.5" />
-            <span>Return to Otakuverse Storefront</span>
+            <span>Return to BAKA Storefront</span>
           </Link>
         </div>
       </motion.div>

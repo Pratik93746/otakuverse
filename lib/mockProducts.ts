@@ -1,4 +1,4 @@
-// Generated authentic OTAKUVERSE product catalog
+// Generated authentic BAKA product catalog
 export interface MockProduct {
   id: string;
   name: string;
@@ -270,7 +270,7 @@ export const MOCK_PRODUCTS: MockProduct[] = [
     "image": "/custom/anime_allstar_bg.jpg",
     "characterName": "Multiple Heroes",
     "animeName": "Various",
-    "brandName": "OTAKUVERSE",
+    "brandName": "BAKA",
     "categoryName": "Bundles",
     "stock": 10,
     "rating": 5.0,

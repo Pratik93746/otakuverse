@@ -50,7 +50,7 @@ async function syncMongoCartDirectly(items: CartItem[]) {
         method: 'POST',
         body: JSON.stringify({ items }),
       });
-      window.dispatchEvent(new CustomEvent('otakuverse-cart-updated', { detail: items }));
+      window.dispatchEvent(new CustomEvent('baka-cart-updated', { detail: items }));
     } catch (err) {
       console.warn('⚠️ Failed to sync cart to MongoDB:', err);
     }
@@ -157,7 +157,7 @@ export const useCartStore = create<CartStore>()((set, get) => ({
           .catch(() => {});
       }
 
-      window.dispatchEvent(new CustomEvent('otakuverse-cart-updated', { detail: [] }));
+      window.dispatchEvent(new CustomEvent('baka-cart-updated', { detail: [] }));
     }
   },
 

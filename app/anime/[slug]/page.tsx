@@ -47,13 +47,13 @@ async function getAnimeData(slug: string) {
 export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { slug } = await Promise.resolve(params);
   const anime = await getAnimeData(slug);
-  if (!anime) return { title: 'Anime Franchise Not Found | OTAKUVERSE' };
+  if (!anime) return { title: 'Anime Franchise Not Found | BAKA' };
 
   return {
-    title: `${anime.name} Figures & Collectibles | OTAKUVERSE`,
+    title: `${anime.name} Figures & Collectibles | BAKA`,
     description:
       anime.description ??
-      `Shop authentic ${anime.name} anime figures, statues, and collectibles on OTAKUVERSE.`,
+      `Shop authentic ${anime.name} anime figures, statues, and collectibles on BAKA.`,
   };
 }
 

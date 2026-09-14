@@ -133,7 +133,7 @@ export default async function AdminDashboardPage() {
               <span className="bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider">
                 Admin Panel
               </span>
-              <span className="text-xs text-gray-500">OTAKUVERSE v1.0</span>
+              <span className="text-xs text-gray-500">BAKA v1.0</span>
             </div>
             <h1 className="font-heading text-3xl tracking-wide uppercase">
               STORE MANAGEMENT DASHBOARD

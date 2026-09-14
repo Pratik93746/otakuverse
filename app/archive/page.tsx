@@ -6,7 +6,7 @@ import { Sparkles, Shield, ArrowLeft, Flame, Package } from 'lucide-react';
 import ShopClient from '../shop/ShopClient';
 
 export const metadata: Metadata = {
-  title: 'Official Anime Archive Collection (147 Items) | OTAKUVERSE',
+  title: 'Official Anime Archive Collection (147 Items) | BAKA',
   description: 'Explore our complete authentic 147-piece anime figure archive collection across Dragon Ball, Naruto, One Piece, Demon Slayer, JJK, and more.',
 };
 

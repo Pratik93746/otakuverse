@@ -118,7 +118,7 @@ export async function POST(request: NextRequest) {
       characterName: characterName || '',
       animeName: animeName || 'Anime',
       animeSlug,
-      brandName: brandName || 'OTAKUVERSE Exclusive',
+      brandName: brandName || 'BAKA Exclusive',
       categoryName: categoryName || 'Figures',
       categorySlug,
       stock: Number(stock) || 0,
@@ -128,7 +128,7 @@ export async function POST(request: NextRequest) {
       isLimitedEdition: badge === 'limited',
       isPreOrder: badge === 'preorder',
       isFeatured: badge === 'featured' || true,
-      description: description || `Premium ${name} official figure from OTAKUVERSE.`,
+      description: description || `Premium ${name} official figure from BAKA.`,
     });
 
     return NextResponse.json({ success: true, product: newProduct }, { status: 201 });

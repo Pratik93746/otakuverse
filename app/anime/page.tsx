@@ -5,7 +5,7 @@ import { ArrowRight, Flame } from 'lucide-react';
 import { ANIME_FRANCHISES } from '@/lib/mockProducts';
 
 export const metadata: Metadata = {
-  title: 'All Anime Franchises & Universes | OTAKUVERSE',
+  title: 'All Anime Franchises & Universes | BAKA',
   description: 'Explore official collectible figures and statues from Dragon Ball, Naruto, One Piece, Demon Slayer, Jujutsu Kaisen, Bleach, and more.',
 };
 

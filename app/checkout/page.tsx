@@ -470,7 +470,7 @@ export default function CheckoutPage() {
         key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
         amount: total * 100,
         currency: 'INR',
-        name: 'OTAKUVERSE',
+        name: 'BAKA',
         description: 'Anime Collectibles Order',
         order_id: orderData.razorpayOrderId,
         prefill: {
@@ -536,7 +536,7 @@ export default function CheckoutPage() {
             ORDER CONFIRMED!
           </h1>
           <p className="text-gray-600 text-sm mb-6 leading-relaxed">
-            Thank you for ordering with OTAKUVERSE. Your authentic anime collectible is being carefully packaged with collector protection!
+            Thank you for ordering with BAKA. Your authentic anime collectible is being carefully packaged with collector protection!
           </p>
 
           <div className="bg-gray-50 border border-gray-200 p-4 mb-6 text-left space-y-2 rounded-sm text-xs">
@@ -575,7 +575,7 @@ export default function CheckoutPage() {
       <header className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-xs">
         <div className="container-wide py-3.5 flex items-center justify-between">
           <Link href="/" className="font-heading text-2xl tracking-[0.18em] text-gray-900 hover:text-brand-red transition-colors">
-            OTAKUVERSE
+            BAKA
           </Link>
 
           {/* Stepper Indicator */}

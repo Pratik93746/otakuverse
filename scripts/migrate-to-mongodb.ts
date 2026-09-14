@@ -132,7 +132,7 @@ async function runMigration() {
         characterName: p.characterName || '',
         animeName: p.animeName || 'Anime',
         animeSlug: p.animeSlug || 'anime',
-        brandName: p.brandName || 'OTAKUVERSE Exclusive',
+        brandName: p.brandName || 'BAKA Exclusive',
         categoryName: p.categoryName || 'Figures',
         categorySlug: p.categorySlug || 'figures',
         stock: Number(stock),
@@ -178,7 +178,7 @@ async function runMigration() {
           firebaseUid,
           customer: {
             name: o.customer?.name || 'Valued Collector',
-            email: o.customer?.email || 'customer@otakuverse.com',
+            email: o.customer?.email || 'customer@baka.style',
             phone: o.customer?.phone || '',
           },
           shippingAddress: {
