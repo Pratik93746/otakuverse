@@ -85,6 +85,58 @@ export default async function AdminDashboardPage() {
     .filter((p) => p.stock <= 5)
     .slice(0, 6);
 
+  // 7. Category distribution
+  const categoryStats = [
+    {
+      name: 'Figures',
+      slug: 'figures',
+      emoji: '🥷',
+      tagline: 'Action Figures & Statues',
+      count: allAvailableProducts.filter((p) => {
+        const c = (p.categoryName || '').toLowerCase();
+        return c.includes('figure') || c.includes('statue');
+      }).length,
+    },
+    {
+      name: 'Katanas',
+      slug: 'katanas',
+      emoji: '🗡️',
+      tagline: 'Nichirin Blades & Swords',
+      count: allAvailableProducts.filter((p) => (p.categoryName || '').toLowerCase().includes('katana')).length,
+    },
+    {
+      name: 'Keychains',
+      slug: 'keychains',
+      emoji: '🗝️',
+      tagline: 'Spinners, Charms & Emblems',
+      count: allAvailableProducts.filter((p) => (p.categoryName || '').toLowerCase().includes('keychain')).length,
+    },
+    {
+      name: 'Clothing',
+      slug: 'clothing',
+      emoji: '🥋',
+      tagline: 'Streetwear, Hoodies & Tees',
+      count: allAvailableProducts.filter((p) => (p.categoryName || '').toLowerCase().includes('cloth')).length,
+    },
+    {
+      name: 'Collectables',
+      slug: 'collectables',
+      emoji: '💎',
+      tagline: 'Plushies, Devil Fruits & Replicas',
+      count: allAvailableProducts.filter((p) => {
+        const c = (p.categoryName || '').toLowerCase();
+        return c.includes('collect') || c.includes('plush');
+      }).length,
+    },
+    {
+      name: 'Limited Editions',
+      slug: 'limited-editions',
+      emoji: '⭐',
+      tagline: 'Vault Collector Pieces',
+      count: allAvailableProducts.filter((p) => (p.categoryName || '').toLowerCase().includes('limited') || p.isLimitedEdition).length,
+    },
+  ];
+
   return (
     <div className="min-h-screen bg-gray-100 py-8">
       <div className="container-wide">
@@ -251,17 +303,16 @@ export default async function AdminDashboardPage() {
                         </td>
                         <td className="py-3 px-3">
                           <span
-                            className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-sm ${
-                              ord.status === 'DELIVERED'
+                            className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-sm ${ord.status === 'DELIVERED'
                                 ? 'bg-green-100 text-green-800'
                                 : ord.status === 'SHIPPED'
-                                ? 'bg-blue-100 text-blue-800'
-                                : ord.status === 'PROCESSING'
-                                ? 'bg-purple-100 text-purple-800'
-                                : ord.status === 'CONFIRMED'
-                                ? 'bg-emerald-100 text-emerald-800'
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : ord.status === 'PROCESSING'
+                                    ? 'bg-purple-100 text-purple-800'
+                                    : ord.status === 'CONFIRMED'
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-yellow-100 text-yellow-800'
+                              }`}
                           >
                             {ord.status}
                           </span>
@@ -329,6 +380,52 @@ export default async function AdminDashboardPage() {
                 ))}
               </div>
             )}
+          </div>
+        </div>
+
+        {/* Categories Inventory Breakdown */}
+        <div className="bg-white border border-gray-200 p-6 mt-8">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <div className="flex items-center gap-2 mb-0.5">
+                <span className="bg-gray-900 text-white text-[9px] font-bold px-1.5 py-0.5 uppercase tracking-wider rounded">
+                  Store Catalog
+                </span>
+                <span className="text-xs text-gray-500">Live Inventory Breakdown</span>
+              </div>
+              <h2 className="font-heading text-xl tracking-wider uppercase">
+                INVENTORY BY STORE CATEGORY
+              </h2>
+            </div>
+            <Link
+              href="/admin/products"
+              className="text-xs font-bold text-brand-red hover:underline uppercase inline-flex items-center gap-1"
+            >
+              Manage Catalog <ArrowUpRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+            {categoryStats.map((cat) => (
+              <Link
+                key={cat.slug}
+                href={`/admin/products`}
+                className="p-4 border rounded border-gray-200 hover:border-gray-400 bg-gray-50/70 hover:bg-white hover:shadow-xs transition-all text-center group"
+              >
+                <span className="text-3xl block mb-2 group-hover:scale-115 transition-transform">
+                  {cat.emoji}
+                </span>
+                <p className="font-bold text-xs text-gray-900 uppercase tracking-wider leading-tight">
+                  {cat.name}
+                </p>
+                <p className="text-[10px] text-gray-400 line-clamp-1 mt-0.5">
+                  {cat.tagline}
+                </p>
+                <span className="inline-block mt-2 font-mono text-[11px] font-bold text-gray-700 bg-white border border-gray-200 px-2 py-0.5 rounded">
+                  {cat.count} items
+                </span>
+              </Link>
+            ))}
           </div>
         </div>
       </div>

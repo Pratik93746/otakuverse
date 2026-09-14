@@ -2,6 +2,7 @@
 
 import { motion, AnimatePresence } from 'framer-motion';
 import Link from 'next/link';
+import Image from 'next/image';
 import {
   X,
   ChevronRight,
@@ -20,13 +21,13 @@ import { useCartStore } from '@/store/cart';
 import { signOutFirebase } from '@/lib/firebase';
 
 const navLinks = [
-  { label: 'Shop All', href: '/shop', description: 'Browse all figures' },
-  { label: 'Archive Vault', href: '/archive', description: '3D Gallery & Rarities' },
-  { label: 'Characters', href: '/characters', description: 'Shop by character' },
-  { label: 'Anime', href: '/anime', description: 'Shop by franchise' },
-  { label: 'New Arrivals', href: '/shop?filter=new', description: 'Latest additions' },
-  { label: 'Best Sellers', href: '/shop?filter=bestsellers', description: 'Top picks' },
-  { label: 'Limited Edition', href: '/shop?filter=limited', description: 'Exclusive drops' },
+  { label: 'Shop All', href: '/shop', description: 'Browse full vault' },
+  { label: 'Figures', href: '/shop?category=figures', description: 'Action figures & statues' },
+  { label: 'Katanas', href: '/shop?category=katanas', description: 'Authentic Nichirin metal swords' },
+  { label: 'Keychains', href: '/shop?category=keychains', description: 'Metal spinners & charms' },
+  { label: 'Clothing', href: '/shop?category=clothing', description: 'Oversized hoodies & anime tees' },
+  { label: 'Collectables', href: '/shop?category=collectables', description: 'Plushies & prop replicas' },
+  { label: 'New Arrivals', href: '/shop?filter=new', description: 'Latest official drops' },
 ];
 
 interface MobileMenuProps {
@@ -71,9 +72,15 @@ export function MobileMenu({ isOpen, onClose }: MobileMenuProps) {
             className="fixed top-0 left-0 h-full w-84 max-w-[88vw] bg-[#0C0B14] z-50 lg:hidden flex flex-col shadow-2xl border-r border-white/[0.08] overflow-hidden"
           >
             {/* Header */}
-            <div className="flex items-center justify-between p-5 border-b border-white/[0.08] bg-black/40">
-              <Link href="/" onClick={onClose} className="flex items-center gap-2">
-                <span className="font-heading text-2xl tracking-[0.15em] text-white">OTAKUVERSE</span>
+            <div className="flex items-center justify-between p-4 border-b border-white/[0.08] bg-black/40">
+              <Link href="/" onClick={onClose} className="flex items-center">
+                <Image
+                  src="/custom/baka_header_brand.png"
+                  alt="BAKA"
+                  width={200}
+                  height={55}
+                  className="h-10 w-auto object-contain"
+                />
               </Link>
               <button
                 onClick={onClose}

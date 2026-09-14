@@ -1,140 +1,168 @@
 'use client';
 
 import Link from 'next/link';
-import Image from 'next/image';
 import { motion } from 'framer-motion';
 import { ArrowRight, Sparkles } from 'lucide-react';
 
-const categories = [
-  { name: 'ACTION FIGURES', slug: 'action-figures', emoji: '⚔️', image: '/catalog/action-figures/item-001.jpg', gradient: 'from-red-600 to-rose-500', glow: 'rgba(239, 68, 68, 0.25)' },
-  { name: 'STATUES', slug: 'statues', emoji: '🗿', image: '/catalog/statues/item-001.jpg', gradient: 'from-purple-600 to-violet-500', glow: 'rgba(139, 92, 246, 0.25)' },
-  { name: 'ANIME', slug: 'anime', emoji: '🎌', image: '/catalog/anime/item-001.jpg', gradient: 'from-blue-600 to-indigo-500', glow: 'rgba(99, 102, 241, 0.25)' },
-  { name: 'MANGA', slug: 'manga', emoji: '📚', image: '/catalog/manga/item-001.jpg', gradient: 'from-emerald-600 to-teal-500', glow: 'rgba(16, 185, 129, 0.25)' },
-  { name: 'GAMING', slug: 'gaming', emoji: '🎮', image: '/catalog/gaming/item-001.jpg', gradient: 'from-orange-500 to-amber-500', glow: 'rgba(249, 115, 22, 0.25)' },
-  { name: 'MOVIE FIGURES', slug: 'movie-figures', emoji: '🎬', image: '/catalog/movie-figures/item-001.jpg', gradient: 'from-pink-600 to-rose-500', glow: 'rgba(236, 72, 153, 0.25)' },
-  { name: 'LIMITED EDITIONS', slug: 'limited-editions', emoji: '⭐', image: '/catalog/limited-editions/item-001.jpg', gradient: 'from-yellow-500 to-amber-400', glow: 'rgba(234, 179, 8, 0.25)' },
-  { name: 'COLLECTIBLES', slug: 'collectibles', emoji: '💎', image: '/catalog/collectibles/item-001.jpg', gradient: 'from-cyan-500 to-sky-500', glow: 'rgba(6, 182, 212, 0.25)' },
+const posterCategories = [
+  {
+    name: 'FIGURES',
+    japanese: 'フィギュア',
+    slug: 'figures',
+    emoji: '🥷',
+    tagline: 'Action Figures & Statues',
+    gradient: 'from-red-600 to-rose-500',
+    glow: 'rgba(239, 68, 68, 0.25)',
+    accentColor: '#EF4444',
+    itemCount: '280+ Drops',
+  },
+  {
+    name: 'KATANAS',
+    japanese: '刀 • 滅',
+    slug: 'katanas',
+    emoji: '🗡️',
+    tagline: 'Metal & Wood Nichirin Blades',
+    gradient: 'from-amber-500 to-red-600',
+    glow: 'rgba(245, 158, 11, 0.25)',
+    accentColor: '#F59E0B',
+    itemCount: 'Battle Ready',
+  },
+  {
+    name: 'KEYCHAINS',
+    japanese: 'キーホルダー',
+    slug: 'keychains',
+    emoji: '🗝️',
+    tagline: 'Spinners, Charms & Emblems',
+    gradient: 'from-cyan-500 to-blue-600',
+    glow: 'rgba(6, 182, 212, 0.25)',
+    accentColor: '#06B6D4',
+    itemCount: 'Zinc Alloy & Enamel',
+  },
+  {
+    name: 'CLOTHING',
+    japanese: 'ファッション',
+    slug: 'clothing',
+    emoji: '🥋',
+    tagline: 'Streetwear, Hoodies & Tees',
+    gradient: 'from-purple-600 to-indigo-600',
+    glow: 'rgba(147, 51, 234, 0.25)',
+    accentColor: '#A855F7',
+    itemCount: 'Heavyweight Cotton',
+  },
+  {
+    name: 'COLLECTABLES',
+    japanese: 'コレクション',
+    slug: 'collectables',
+    emoji: '💎',
+    tagline: 'Plushies, Devil Fruits & Replicas',
+    gradient: 'from-rose-500 to-orange-500',
+    glow: 'rgba(244, 63, 94, 0.25)',
+    accentColor: '#F43F5E',
+    itemCount: 'Vault Exclusives',
+  },
 ];
 
 const containerVariants = {
   hidden: {},
   visible: {
-    transition: { staggerChildren: 0.06 },
+    transition: { staggerChildren: 0.08 },
   },
 };
 
 const cardVariants = {
-  hidden: { opacity: 0, y: 30, scale: 0.95 },
-  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.5, ease: 'easeOut' as const } },
+  hidden: { opacity: 0, y: 20, scale: 0.96 },
+  visible: { opacity: 1, y: 0, scale: 1, transition: { duration: 0.45, ease: 'easeOut' as const } },
 };
 
 export function CategoriesSection() {
   return (
     <section
-      className="section-spacing relative overflow-hidden"
+      id="categories"
+      className="section-spacing relative overflow-hidden border-t border-white/10"
       style={{ backgroundColor: '#0A0A0F' }}
     >
-      {/* Radial ambient glow */}
+      {/* Ambient background glow */}
       <div
-        className="absolute inset-0 pointer-events-none opacity-30"
+        className="absolute inset-0 pointer-events-none opacity-20"
         style={{
           background:
-            'radial-gradient(ellipse 60% 50% at 50% 0%, rgba(230, 51, 41, 0.12) 0%, transparent 70%), radial-gradient(ellipse 50% 60% at 80% 100%, rgba(123, 47, 190, 0.08) 0%, transparent 60%)',
-        }}
-      />
-
-      {/* Subtle grid pattern */}
-      <div
-        className="absolute inset-0 opacity-[0.03] pointer-events-none"
-        style={{
-          backgroundImage:
-            'linear-gradient(rgba(255,255,255,0.1) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,0.1) 1px, transparent 1px)',
-          backgroundSize: '50px 50px',
+            'radial-gradient(ellipse 70% 50% at 50% 0%, rgba(220, 38, 38, 0.15) 0%, transparent 70%), radial-gradient(ellipse 60% 60% at 80% 100%, rgba(245, 158, 11, 0.08) 0%, transparent 60%)',
         }}
       />
 
       <div className="container-wide relative z-10">
-        {/* Title */}
-        <div className="text-center mb-10">
-          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-600/15 border border-red-600/40 text-red-400 text-xs font-black tracking-[0.25em] uppercase mb-3 rounded-md">
+        {/* Header */}
+        <div className="text-center mb-8 sm:mb-12">
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 bg-red-600/15 border border-red-600/40 text-red-400 text-xs font-black tracking-[0.25em] uppercase mb-2.5 rounded-md">
             <Sparkles className="w-3.5 h-3.5 text-yellow-400" />
-            BROWSE BY TYPE
+            OFFICIAL BAKA COLLECTION
           </div>
-          <h2 className="font-heading text-4xl sm:text-6xl tracking-widest uppercase text-white font-black">
-            CATEGORIES
+          <h2 className="font-heading text-3xl sm:text-5xl lg:text-6xl tracking-widest uppercase text-white font-black">
+            EXPLORE BY CATEGORY
           </h2>
-          <div className="h-0.5 w-20 bg-brand-red mx-auto mt-3" />
+          <p className="text-gray-400 text-xs sm:text-sm mt-1 max-w-xl mx-auto">
+            Choose from our 5 core specialized collections featured on the official BAKA poster.
+          </p>
+          <div className="h-0.5 w-24 bg-brand-red mx-auto mt-3" />
         </div>
 
-        {/* Grid */}
+        {/* 5 Clean Emoji Category Cards Grid */}
         <motion.div
-          className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 md:gap-4"
+          className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3.5 sm:gap-4"
           variants={containerVariants}
           initial="hidden"
           whileInView="visible"
           viewport={{ once: true, amount: 0.2 }}
         >
-          {categories.map((cat) => (
+          {posterCategories.map((cat) => (
             <motion.div key={cat.slug} variants={cardVariants}>
               <Link
                 href={`/shop?category=${cat.slug}`}
-                className="group block"
+                className="group block h-full"
               >
                 <div
-                  className="relative h-40 sm:h-48 md:h-52 rounded-xl border border-white/[0.08] overflow-hidden transition-all duration-400 hover:border-white/[0.3] hover:-translate-y-1.5 hover:shadow-2xl"
-                  style={{ backgroundColor: '#12111A' }}
+                  className="relative h-56 sm:h-64 rounded-xl border border-white/10 overflow-hidden transition-all duration-300 hover:border-white/40 hover:-translate-y-2 hover:shadow-2xl flex flex-col justify-between p-5 text-center"
+                  style={{
+                    backgroundColor: '#12111A',
+                  }}
                 >
-                  {/* Background Figure Image */}
-                  <Image
-                    src={cat.image}
-                    alt={cat.name}
-                    fill
-                    className="object-cover opacity-25 group-hover:opacity-40 group-hover:scale-110 transition-all duration-500 pointer-events-none"
-                  />
-
-                  {/* Gradient overlay */}
+                  {/* Subtle hover background glow */}
                   <div
-                    className={`absolute inset-0 bg-gradient-to-t from-[#12111A] via-[#12111A]/80 to-transparent`}
+                    className="absolute inset-0 opacity-0 group-hover:opacity-10 transition-opacity duration-300 pointer-events-none"
+                    style={{ backgroundColor: cat.accentColor }}
                   />
 
-                  {/* Hover Color Glow Overlay */}
-                  <div
-                    className={`absolute inset-0 bg-gradient-to-br ${cat.gradient} opacity-0 group-hover:opacity-20 transition-opacity duration-500`}
-                  />
-
-                  {/* Bottom gradient bar */}
-                  <div
-                    className={`absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r ${cat.gradient} opacity-0 group-hover:opacity-100 transition-opacity duration-300`}
-                  />
-
-                  {/* Ambient glow */}
-                  <div
-                    className="absolute -bottom-8 left-1/2 -translate-x-1/2 w-32 h-32 rounded-full blur-3xl opacity-0 group-hover:opacity-60 transition-opacity duration-500 pointer-events-none"
-                    style={{ backgroundColor: cat.glow }}
-                  />
-
-                  {/* Content */}
-                  <div className="relative z-10 h-full flex flex-col items-center justify-center p-4">
-                    {/* Emoji */}
-                    <span className="text-3xl sm:text-4xl mb-2 transition-all duration-400 group-hover:scale-125 group-hover:drop-shadow-lg">
-                      {cat.emoji}
+                  {/* Top Japanese Kanji Tag */}
+                  <div className="flex items-center justify-center">
+                    <span className="text-[10px] font-black tracking-widest uppercase px-2.5 py-1 bg-black/60 border border-white/10 text-gray-300 rounded-md">
+                      {cat.japanese}
                     </span>
-
-                    {/* Name */}
-                    <p className="font-heading text-sm sm:text-base md:text-lg tracking-[0.16em] text-white/90 uppercase text-center font-black leading-tight group-hover:text-white transition-colors duration-300">
-                      {cat.name}
-                    </p>
-
-                    {/* Arrow indicator */}
-                    <div className="mt-2 flex items-center gap-1 text-white/0 group-hover:text-white/80 transition-all duration-300 translate-y-2 group-hover:translate-y-0">
-                      <span className="text-[10px] font-bold tracking-widest uppercase">Explore</span>
-                      <ArrowRight className="w-3 h-3" />
-                    </div>
                   </div>
 
-                  {/* Corner accent */}
+                  {/* Center Large Emoji */}
+                  <div className="my-auto py-2">
+                    <span className="text-4xl sm:text-5xl block transition-transform duration-300 group-hover:scale-125 filter drop-shadow-md">
+                      {cat.emoji}
+                    </span>
+                    <h3 className="font-heading text-lg sm:text-xl text-white uppercase tracking-wider font-black mt-3 group-hover:text-red-400 transition-colors">
+                      {cat.name}
+                    </h3>
+                    <p className="text-[11px] text-gray-400 font-medium leading-tight mt-1 line-clamp-2">
+                      {cat.tagline}
+                    </p>
+                  </div>
+
+                  {/* Bottom Strip */}
+                  <div className="pt-2 border-t border-white/5 flex items-center justify-between text-[10px] font-black uppercase tracking-wider text-gray-400 group-hover:text-white transition-colors">
+                    <span>{cat.itemCount}</span>
+                    <span className="flex items-center gap-1 font-bold group-hover:translate-x-1 transition-transform" style={{ color: cat.accentColor }}>
+                      EXPLORE <ArrowRight className="w-3 h-3" />
+                    </span>
+                  </div>
+
+                  {/* Bottom Accent Bar */}
                   <div
-                    className={`absolute top-0 right-0 w-12 h-12 bg-gradient-to-bl ${cat.gradient} opacity-[0.08] group-hover:opacity-[0.2] rounded-bl-3xl transition-opacity duration-300`}
+                    className={`absolute bottom-0 left-0 right-0 h-1 bg-gradient-to-r ${cat.gradient} opacity-40 group-hover:opacity-100 transition-opacity duration-300`}
                   />
                 </div>
               </Link>

@@ -1,13 +1,22 @@
 import Link from 'next/link';
-import { Share2, ExternalLink, MessageCircle, ArrowRight } from 'lucide-react';
+import Image from 'next/image';
+import { Share2, ExternalLink, MessageCircle, ArrowRight, Phone, Truck, MapPin } from 'lucide-react';
+
+const InstagramIcon = ({ className }: { className?: string }) => (
+  <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    <rect width="20" height="20" x="2" y="2" rx="5" ry="5" />
+    <path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z" />
+    <line x1="17.5" x2="17.51" y1="6.5" y2="6.5" />
+  </svg>
+);
 
 const footerLinks = {
   shop: [
-    { label: 'Anime Figures', href: '/shop?category=anime-figures' },
-    { label: 'Action Figures', href: '/shop?category=action-figures' },
-    { label: 'Statues', href: '/shop?category=statues' },
-    { label: 'New Arrivals', href: '/shop?filter=new' },
-    { label: 'Best Sellers', href: '/shop?filter=bestsellers' },
+    { label: 'Figures', href: '/shop?category=figures' },
+    { label: 'Katanas', href: '/shop?category=katanas' },
+    { label: 'Keychains', href: '/shop?category=keychains' },
+    { label: 'Clothing', href: '/shop?category=clothing' },
+    { label: 'Collectables', href: '/shop?category=collectables' },
   ],
   account: [
     { label: 'Hunter Sign In', href: '/login' },
@@ -24,7 +33,7 @@ const footerLinks = {
     { label: 'FAQ', href: '/faq' },
   ],
   company: [
-    { label: 'About OTAKUVERSE', href: '/about' },
+    { label: 'About BAKA', href: '/about' },
     { label: 'Privacy Policy', href: '/privacy' },
     { label: 'Terms of Service', href: '/terms' },
     { label: 'Refund Policy', href: '/refund' },
@@ -39,20 +48,46 @@ export function Footer() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-6 gap-8 lg:gap-8">
           {/* Brand */}
           <div className="lg:col-span-2">
-            <Link href="/" className="inline-block mb-4">
-              <span className="font-heading text-3xl tracking-[0.15em] text-white hover:text-brand-red transition-colors">
-                OTAKUVERSE
-              </span>
+            <Link href="/" className="inline-block mb-4 group">
+              <Image
+                src="/custom/baka_header_brand.png"
+                alt="BAKA - Clothing Style And More"
+                width={340}
+                height={93}
+                className="h-16 sm:h-20 w-auto object-contain transition-all duration-300 group-hover:brightness-125 group-hover:drop-shadow-[0_0_16px_rgba(239,68,68,0.7)]"
+              />
             </Link>
-            <p className="text-gray-400 text-sm leading-relaxed max-w-xs mb-6">
-              Bring your favorite anime characters to life. Premium collectibles,
-              figures, and statues for true fans and collectors.
+            <p className="text-gray-400 text-xs sm:text-sm leading-relaxed max-w-xs mb-4">
+              Official Japanese streetwear, authentic Nichirin katanas, spinners, figures and rare collectibles delivered PAN India.
             </p>
+
+            {/* Poster Contact info */}
+            <div className="space-y-2 mb-6 text-xs text-gray-300">
+              <div className="flex items-center gap-2">
+                <Truck className="w-3.5 h-3.5 text-yellow-400 shrink-0" />
+                <span className="font-bold tracking-wider">PAN INDIA DELIVERY</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <Phone className="w-3.5 h-3.5 text-brand-red shrink-0" />
+                <span className="font-mono text-gray-300">+91 9871452380 / +91 9971977012</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <InstagramIcon className="w-3.5 h-3.5 text-pink-500 shrink-0" />
+                <a
+                  href="https://instagram.com/its_baka.style"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="font-bold text-gray-200 hover:text-pink-400 transition-colors"
+                >
+                  @ITS_BAKA.STYLE
+                </a>
+              </div>
+            </div>
 
             {/* Social */}
             <div className="flex items-center gap-3">
               <a
-                href="https://instagram.com"
+                href="https://instagram.com/its_baka.style"
                 target="_blank"
                 rel="noopener noreferrer"
                 className="w-9 h-9 border border-gray-700 flex items-center justify-center hover:border-brand-red hover:bg-brand-red transition-all duration-200 group"
@@ -187,7 +222,7 @@ export function Footer() {
       <div className="border-t border-gray-800">
         <div className="container-wide py-5 flex flex-col sm:flex-row items-center justify-between gap-3">
           <p className="text-xs text-gray-500">
-            © {new Date().getFullYear()} OTAKUVERSE. All rights reserved.
+            © {new Date().getFullYear()} BAKA STYLE. All rights reserved.
           </p>
           <div className="flex items-center gap-4">
             <span className="text-xs text-gray-500">

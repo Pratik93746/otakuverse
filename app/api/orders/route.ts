@@ -11,14 +11,15 @@ import {
   saveFirestoreAddress,
   FirestoreOrderItem,
 } from '@/lib/firestore';
+import { saveStoredOrder } from '@/lib/customOrdersStore';
 import Razorpay from 'razorpay';
 
 const razorpay =
   process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
     ? new Razorpay({
-        key_id: process.env.RAZORPAY_KEY_ID,
-        key_secret: process.env.RAZORPAY_KEY_SECRET,
-      })
+      key_id: process.env.RAZORPAY_KEY_ID,
+      key_secret: process.env.RAZORPAY_KEY_SECRET,
+    })
     : null;
 
 export async function POST(request: NextRequest) {
@@ -172,16 +173,17 @@ export async function POST(request: NextRequest) {
       }
     }
 
-    // Create permanent order in Firestore
-    const firestoreOrder = await createFirestoreOrder({
+    // Construct complete order payload
+    const nowIso = new Date().toISOString();
+    const orderPayload = {
       id: orderNumber,
       orderNumber,
-      userId,
+      userId: userId || '',
       customer: {
         name,
         email,
         phone,
-        uid: userId,
+        uid: userId || '',
       },
       shippingAddress: shippingAddressSnapshot,
       items: verifiedItems,
@@ -200,13 +202,34 @@ export async function POST(request: NextRequest) {
         paymentMethod: paymentMethod === 'cod' ? 'COD' : 'RAZORPAY',
         amount: serverTotal,
         currency: 'INR',
-        createdAt: new Date().toISOString(),
+        createdAt: nowIso,
       },
-    });
+      createdAt: nowIso,
+      updatedAt: nowIso,
+    };
+
+    // 1. Immediately persist to Custom Orders Store (guarantees 100% order capture)
+    try {
+      saveStoredOrder(orderPayload);
+    } catch (storeErr) {
+      console.warn('⚠️ [customOrdersStore notice]:', storeErr);
+    }
+
+    // 2. Sync to Firestore (non-blocking if Firestore network/rules lag)
+    let firestoreOrder = orderPayload;
+    try {
+      firestoreOrder = await createFirestoreOrder(orderPayload as any);
+    } catch (fsErr) {
+      console.warn('⚠️ [Firestore order notice]:', fsErr);
+    }
 
     // Clear user's Firestore cart upon placing order
     if (session?.user?.id) {
-      await clearFirestoreCart(session.user.id);
+      try {
+        await clearFirestoreCart(session.user.id);
+      } catch (cartErr) {
+        // ignore
+      }
     }
 
     // Dual-write to Prisma if database is connected

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import {
   Eye,
@@ -152,9 +153,14 @@ export default function SignupPage() {
       {/* Header Logo */}
       <div className="relative z-10 text-center">
         <Link href="/" className="inline-block group">
-          <span className="font-heading text-3xl sm:text-4xl tracking-[0.2em] uppercase text-white font-black group-hover:text-brand-red transition-colors">
-            OTAKUVERSE
-          </span>
+          <Image
+            src="/custom/baka_logo.png"
+            alt="BAKA"
+            width={220}
+            height={64}
+            className="h-12 sm:h-15 w-auto object-contain mx-auto transition-all duration-300 group-hover:brightness-125 group-hover:drop-shadow-[0_0_14px_rgba(239,68,68,0.7)]"
+            priority
+          />
         </Link>
       </div>
 

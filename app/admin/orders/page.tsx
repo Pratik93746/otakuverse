@@ -200,30 +200,28 @@ export default async function AdminOrdersPage() {
                       </td>
                       <td className="py-3.5 px-4">
                         <span
-                          className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-sm ${
-                            order.status === 'DELIVERED'
+                          className={`px-2.5 py-1 text-[10px] font-bold uppercase rounded-sm ${order.status === 'DELIVERED'
                               ? 'bg-green-100 text-green-800'
                               : order.status === 'SHIPPED'
-                              ? 'bg-blue-100 text-blue-800'
-                              : order.status === 'PROCESSING'
-                              ? 'bg-purple-100 text-purple-800'
-                              : order.status === 'CONFIRMED'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : order.status === 'CANCELLED'
-                              ? 'bg-red-100 text-red-800'
-                              : 'bg-yellow-100 text-yellow-800'
-                          }`}
+                                ? 'bg-blue-100 text-blue-800'
+                                : order.status === 'PROCESSING'
+                                  ? 'bg-purple-100 text-purple-800'
+                                  : order.status === 'CONFIRMED'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : order.status === 'CANCELLED'
+                                      ? 'bg-red-100 text-red-800'
+                                      : 'bg-yellow-100 text-yellow-800'
+                            }`}
                         >
                           {order.status}
                         </span>
                       </td>
                       <td className="py-3.5 px-4">
                         <span
-                          className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-sm ${
-                            order.paymentStatus === 'PAID'
+                          className={`px-2 py-0.5 text-[10px] font-bold uppercase rounded-sm ${order.paymentStatus === 'PAID'
                               ? 'bg-emerald-100 text-emerald-800'
                               : 'bg-orange-100 text-orange-800'
-                          }`}
+                            }`}
                         >
                           {order.paymentMethod} • {order.paymentStatus}
                         </span>

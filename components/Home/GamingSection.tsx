@@ -122,8 +122,8 @@ export function GamingSection() {
   };
 
   return (
-    <section 
-      id="gaming" 
+    <section
+      id="gaming"
       className="section-spacing text-white relative overflow-hidden border-t border-amber-950/40 scroll-mt-20"
       style={{ backgroundColor: '#07070B', color: '#FFFFFF' }}
     >
@@ -138,7 +138,7 @@ export function GamingSection() {
       />
 
       <div className="container-wide relative z-10">
-        
+
         {/* Gaming Mood Header */}
         <div className="flex flex-col lg:flex-row lg:items-end justify-between mb-8 sm:mb-10 gap-4 sm:gap-6 border-b border-white/10 pb-6">
           <div>
@@ -160,11 +160,10 @@ export function GamingSection() {
               <button
                 key={g.id}
                 onClick={() => setActiveGenre(g.id)}
-                className={`px-3 py-1.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider rounded-md border transition-all cursor-pointer ${
-                  activeGenre === g.id
+                className={`px-3 py-1.5 text-[11px] sm:text-xs font-bold uppercase tracking-wider rounded-md border transition-all cursor-pointer ${activeGenre === g.id
                     ? 'bg-amber-500 text-black border-amber-400 font-extrabold shadow-lg shadow-amber-500/30'
                     : 'bg-black/50 border-white/15 text-gray-300 hover:border-white/40 hover:text-white'
-                }`}
+                  }`}
               >
                 {g.label}
               </button>
@@ -174,14 +173,14 @@ export function GamingSection() {
 
         {/* Centerpiece: Sekiro Shadows Die Twice Big 3D Stage */}
         <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 sm:gap-8 items-center bg-gradient-to-r from-amber-950/25 via-[#0E0D14] to-red-950/25 border border-amber-500/30 p-4 sm:p-8 rounded-xl shadow-2xl">
-          
+
           {/* Left Column: Sekiro 3D Tilt Card */}
           <div className="lg:col-span-5 flex justify-center w-full">
             <Card3DTilt intensity={14} glare={true} className="w-full max-w-[290px] sm:max-w-[340px]">
               <div className="relative w-full bg-gradient-to-b from-[#181622] via-[#0E0D14] to-black border-2 border-amber-500/70 shadow-2xl shadow-amber-900/40 rounded-xl overflow-hidden flex flex-col justify-between p-3 group">
-                
+
                 {/* 3D Image */}
-                <div className="relative w-full h-[350px] sm:h-[400px] bg-black overflow-hidden rounded-lg">
+                <Link href={`/product/${gamingSpotlight.slug}`} className="relative w-full h-[350px] sm:h-[400px] bg-black overflow-hidden rounded-lg block">
                   <img
                     src={gamingSpotlight.image}
                     alt={gamingSpotlight.name}
@@ -198,7 +197,7 @@ export function GamingSection() {
                   <div className="absolute top-2.5 right-2.5 px-2 py-0.5 bg-black/80 backdrop-blur-md border border-white/20 text-amber-400 text-[10px] font-black tracking-wider uppercase rounded-md">
                     {gamingSpotlight.discount}
                   </div>
-                </div>
+                </Link>
 
                 {/* Bottom Details */}
                 <div className="p-2.5 bg-[#0A0A0F]/95 backdrop-blur-md border border-white/10 flex items-center justify-between rounded-lg mt-2">

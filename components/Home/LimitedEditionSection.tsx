@@ -70,16 +70,18 @@ export async function LimitedEditionSection() {
           <div className="lg:col-span-5 flex justify-center items-center">
             <Card3DTilt intensity={20} glare={true} className="w-full max-w-[320px] lg:max-w-[340px] h-[500px] sm:h-[560px] mx-auto">
               <div className="relative w-full h-full min-h-[480px] bg-gradient-to-b from-red-950/60 via-black to-black border-2 border-red-600/60 shadow-2xl shadow-red-900/40 overflow-hidden flex flex-col justify-between p-5 group rounded-xs">
-                <Image
-                  src="/custom/sukuna_collectors_3d.png"
-                  alt="Ryomen Sukuna Collector's Edition 3D Statue"
-                  fill
-                  quality={100}
-                  unoptimized
-                  priority
-                  className="object-cover object-top transition-transform duration-700 group-hover:scale-105"
-                />
-                <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent opacity-90" />
+                <Link href="/product/sukuna-figure" className="absolute inset-0 z-0">
+                  <Image
+                    src="/custom/sukuna_collectors_3d.png"
+                    alt="Ryomen Sukuna Collector's Edition 3D Statue"
+                    fill
+                    quality={100}
+                    unoptimized
+                    priority
+                    className="object-cover object-top transition-transform duration-700 group-hover:scale-105"
+                  />
+                  <div className="absolute inset-0 bg-gradient-to-t from-black via-black/30 to-transparent opacity-90 pointer-events-none" />
+                </Link>
 
                 {/* Top Badge */}
                 <div className="relative z-10 flex items-center justify-between">
@@ -111,18 +113,12 @@ export async function LimitedEditionSection() {
                     <span className="text-xs font-bold text-green-400 uppercase">21% OFF</span>
                   </div>
 
-                  <div className="grid grid-cols-2 gap-2 pt-2">
+                  <div className="grid grid-cols-1 gap-2 pt-2">
                     <Link
                       href="/product/sukuna-figure"
                       className="btn-primary py-3 text-xs justify-center gap-1.5 shadow-lg shadow-red-600/30"
                     >
                       <ShoppingBag className="w-3.5 h-3.5" /> ORDER NOW
-                    </Link>
-                    <Link
-                      href="/product/sukuna-figure"
-                      className="btn-secondary text-white border-white/30 hover:bg-white hover:text-black py-3 text-xs justify-center gap-1.5"
-                    >
-                      <Eye className="w-3.5 h-3.5" /> 3D INSPECT
                     </Link>
                   </div>
                 </div>

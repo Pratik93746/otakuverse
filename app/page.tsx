@@ -1,19 +1,12 @@
 import { Suspense } from 'react';
 import {
   HeroSection,
-  PromoBanner,
   TrendingSection,
   GamingSection,
   TrustFeatures,
   CategoriesSection,
   ThemeSection,
   FeaturedProducts,
-  BestDealsSection,
-  NewArrivalsSection,
-  BestSellersSection,
-  LimitedEditionSection,
-  BrandsSection,
-  TestimonialsSection,
 } from '@/components/Home';
 import { ProductCardSkeleton } from '@/components/ProductCard/ProductCardSkeleton';
 
@@ -23,13 +16,10 @@ export default function HomePage() {
       {/* 1. Hero */}
       <HeroSection />
 
-      {/* 2. Marquee Ticker & Hot Drop */}
-      <PromoBanner />
-
-      {/* 3. Nowadays Trending (Spider-Man & Hot Drops) */}
+      {/* 2. Nowadays Trending (Spider-Man & Hot Drops) */}
       <TrendingSection />
 
-      {/* 4. Trust Features */}
+      {/* 3. Trust Features */}
       <TrustFeatures />
 
       {/* 4. Categories */}
@@ -55,32 +45,6 @@ export default function HomePage() {
       >
         <FeaturedProducts />
       </Suspense>
-
-      {/* 7. Anime Best Deals */}
-      <Suspense fallback={<div className="h-64" />}>
-        <BestDealsSection />
-      </Suspense>
-
-      {/* 8. New Arrivals */}
-      <Suspense fallback={<div className="h-64" />}>
-        <NewArrivalsSection />
-      </Suspense>
-
-      {/* 9. Best Sellers */}
-      <Suspense fallback={<div className="h-64" />}>
-        <BestSellersSection />
-      </Suspense>
-
-      {/* 10. Limited Edition */}
-      <Suspense fallback={<div className="h-64" />}>
-        <LimitedEditionSection />
-      </Suspense>
-
-      {/* 11. Brands */}
-      <BrandsSection />
-
-      {/* 12. Testimonials */}
-      <TestimonialsSection />
     </div>
   );
 }

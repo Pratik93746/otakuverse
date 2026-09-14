@@ -28,21 +28,21 @@ const bebasNeue = Bebas_Neue({
 
 export const metadata: Metadata = {
   title: {
-    default: 'OTAKUVERSE — Premium Anime Collectibles & Figures',
-    template: '%s | OTAKUVERSE',
+    default: 'BAKA STYLE — Clothing Style And More | Anime Figures, Katanas & Streetwear',
+    template: '%s | BAKA STYLE',
   },
   description:
-    'Bring your favorite anime characters to life. Shop premium anime figures, statues, collectibles, and limited editions at OTAKUVERSE.',
+    'Your Anime. Your Style. Official Japanese anime figures, authentic Nichirin katanas, metal keychains, streetwear hoodies, and rare collectibles delivered PAN India.',
   keywords: [
+    'BAKA Style',
+    'anime clothing',
+    'anime streetwear',
+    'anime katanas',
+    'anime keychains',
     'anime figures',
     'anime collectibles',
     'action figures',
     'anime statues',
-    'limited edition figures',
-    'Goku figure',
-    'Naruto figure',
-    'One Piece collectibles',
-    'OTAKUVERSE',
   ],
   openGraph: {
     type: 'website',

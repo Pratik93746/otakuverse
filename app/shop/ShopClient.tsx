@@ -18,15 +18,13 @@ const sortOptions = [
 ];
 
 const categoryOptions = [
-  { slug: '', label: 'All Figures', emoji: '🔥' },
-  { slug: 'action-figures', label: 'Action Figures', emoji: '⚔️' },
-  { slug: 'statues', label: 'Statues', emoji: '🗿' },
-  { slug: 'anime', label: 'Anime', emoji: '🎌' },
-  { slug: 'manga', label: 'Manga', emoji: '📚' },
-  { slug: 'gaming', label: 'Gaming', emoji: '🎮' },
-  { slug: 'movie-figures', label: 'Movie Figures', emoji: '🎬' },
+  { slug: '', label: 'All Products', emoji: '🔥' },
+  { slug: 'figures', label: 'Figures', emoji: '🥷' },
+  { slug: 'katanas', label: 'Katanas', emoji: '🗡️' },
+  { slug: 'keychains', label: 'Keychains', emoji: '🗝️' },
+  { slug: 'clothing', label: 'Clothing', emoji: '🥋' },
+  { slug: 'collectables', label: 'Collectables', emoji: '💎' },
   { slug: 'limited-editions', label: 'Limited Editions', emoji: '⭐' },
-  { slug: 'collectibles', label: 'Collectibles', emoji: '💎' },
 ];
 
 const animeOptions = [

@@ -31,39 +31,39 @@ const trendingCards = [
   },
   {
     id: 'trend-2',
-    name: 'Tanjiro Kamado Hinokami Kagura Sun Breathing Figure',
-    franchise: 'Demon Slayer • Kimetsu no Yaiba',
-    slug: 'tanjiro-water-breathing-figure',
-    price: 2799,
-    compareAtPrice: 3499,
-    discount: '20% OFF',
-    image: '/custom/tanjiro_new_arrival_3d.jpg',
-    badge: 'VIRAL ON TIKTOK & REELS',
-    viewsCount: '9.4K collectors viewing',
-    stock: 14,
-    rating: 4.9,
-    reviews: 98,
-    accentColor: '#F97316',
-    glowColor: 'rgba(249, 115, 22, 0.45)',
-    description: 'Sculpted with semi-translucent fire dragon arc and high-intensity battle posture.',
+    name: 'Monkey D. Luffy Gear 5 Sun God Nika Awakening Figure',
+    franchise: 'One Piece • Grand Line Masterpiece',
+    slug: 'monkey-d-luffy-gear-5-sun-god-nika-awakening-figure-534',
+    price: 4999,
+    compareAtPrice: 6499,
+    discount: '23% OFF',
+    image: '/catalog/one-piece/item-001.jpg',
+    badge: '⚡ GEAR 5 SUN GOD NIKA',
+    viewsCount: '18.4K collectors viewing',
+    stock: 6,
+    rating: 5.0,
+    reviews: 284,
+    accentColor: '#F59E0B',
+    glowColor: 'rgba(245, 158, 11, 0.45)',
+    description: 'Legendary Sun God Nika Gear 5 awakening sculpt featuring cloud steam sash, laughing joyboy expression, and rubberized lightning effects.',
   },
   {
     id: 'trend-3',
-    name: 'Ryomen Sukuna Malevolent Shrine Domain Resin',
-    franchise: 'Jujutsu Kaisen • Cursed Spirits Vault',
-    slug: 'sukuna-figure',
-    price: 7499,
-    compareAtPrice: 9499,
-    discount: '21% OFF',
-    image: '/custom/sukuna_collectors_3d.png',
-    badge: 'EXCLUSIVE 500 PIECE DROP',
-    viewsCount: '15.2K collectors viewing',
-    stock: 3,
-    rating: 5.0,
-    reviews: 215,
-    accentColor: '#DC2626',
-    glowColor: 'rgba(220, 38, 38, 0.5)',
-    description: 'Features skull altar throne, hand-painted cursed tattoos, and glowing red domain eye effects.',
+    name: 'Ultra Instinct Goku Dynamic Posable Action Figure',
+    franchise: 'Dragon Ball Super • Tournament of Power',
+    slug: 'ultra-instinct-goku-dynamic-posable-action-figure-1',
+    price: 3499,
+    compareAtPrice: 4499,
+    discount: '22% OFF',
+    image: '/catalog/action-figures/item-001.jpg',
+    badge: 'DIVINE FORM RESTOCK',
+    viewsCount: '14.1K collectors viewing',
+    stock: 5,
+    rating: 4.9,
+    reviews: 198,
+    accentColor: '#06B6D4',
+    glowColor: 'rgba(6, 182, 212, 0.45)',
+    description: 'Sculpted with godly silver-white ki aura, battle-damaged dogi, and ultra-articulated limbs for iconic kamehameha poses.',
   },
 ];
 
@@ -152,7 +152,7 @@ export function TrendingSection() {
                   }}
                 >
                   {/* 3D Image Container */}
-                  <div className="relative w-full h-[380px] sm:h-[420px] bg-black overflow-hidden rounded-lg">
+                  <Link href={`/product/${activeItem.slug}`} className="relative w-full h-[380px] sm:h-[420px] bg-black overflow-hidden rounded-lg block">
                     <img
                       src={activeItem.image}
                       alt={activeItem.name}
@@ -169,7 +169,7 @@ export function TrendingSection() {
                     <div className="absolute top-3 right-3 px-2 py-0.5 bg-black/80 backdrop-blur-md border border-white/20 text-yellow-400 text-[10px] font-black tracking-wider uppercase rounded-md">
                       {activeItem.discount}
                     </div>
-                  </div>
+                  </Link>
 
                   {/* Bottom Details & Quick Actions */}
                   <div className="p-3 bg-[#0A0A0F]/95 backdrop-blur-md border border-white/10 flex items-center justify-between rounded-lg mt-2.5">
@@ -252,17 +252,12 @@ export function TrendingSection() {
                   >
                     <ShoppingBag className="w-4 h-4 shrink-0" /> SECURE THIS DROP • {formatPrice(activeItem.price)}
                   </button>
-                  <Link
-                    href={`/product/${activeItem.slug}`}
-                    className="btn-secondary py-3.5 px-4 sm:px-6 text-xs sm:text-sm font-bold uppercase tracking-wider flex items-center justify-center gap-1.5 rounded-md w-full sm:w-auto"
-                  >
-                    <Eye className="w-4 h-4 shrink-0" /> 3D & 360° INSPECT
-                  </Link>
+
                 </div>
               </motion.div>
             </AnimatePresence>
 
-            {/* Selector Tabs: Switch between Spider-Man, Tanjiro, and Sukuna */}
+            {/* Selector Tabs: Switch between Trending Spotlights */}
             <div className="space-y-2 pt-2">
               <span className="text-[11px] font-black uppercase tracking-widest text-gray-400">
                 SWITCH TRENDING SPOTLIGHT:
@@ -274,16 +269,25 @@ export function TrendingSection() {
                     onClick={() => setSelectedIdx(idx)}
                     className={`p-3 text-left border rounded-lg transition-all cursor-pointer flex items-center gap-3 ${
                       idx === selectedIdx
-                        ? 'bg-red-600/20 border-red-500 text-white shadow-lg'
+                        ? 'text-white shadow-lg'
                         : 'bg-black/50 border-white/10 text-gray-400 hover:border-white/30 hover:text-white'
                     }`}
+                    style={
+                      idx === selectedIdx
+                        ? {
+                            backgroundColor: `${item.accentColor}25`,
+                            borderColor: item.accentColor,
+                            boxShadow: `0 0 15px ${item.accentColor}33`,
+                          }
+                        : {}
+                    }
                   >
                     {/* Thumbnail preview */}
                     <div className="w-12 h-12 rounded-md bg-black overflow-hidden shrink-0 border border-white/15">
                       <img src={item.image} alt={item.name} className="w-full h-full object-cover object-top" />
                     </div>
                     <div className="truncate">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-red-400 block truncate">
+                      <span className="text-[9px] font-black uppercase tracking-widest block truncate" style={{ color: item.accentColor }}>
                         {item.badge}
                       </span>
                       <p className="font-heading text-sm text-white uppercase tracking-wide truncate mt-0.5 font-bold">

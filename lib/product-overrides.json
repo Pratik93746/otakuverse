@@ -1,11 +1,23 @@
 {
   "prod-0001": {
-    "stock": 2
+    "stock": 1
   },
   "prod-0110": {
     "stock": 12
   },
   "prod-0084": {
     "stock": 11
+  },
+  "prod-0002": {
+    "stock": 4
+  },
+  "prod-allstar-01": {
+    "stock": 5
+  },
+  "prod-spiderman-01": {
+    "stock": 6
+  },
+  "test1-7445": {
+    "stock": 3
   }
 }

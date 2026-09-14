@@ -55,19 +55,20 @@ const EXISTING_ANIME = [
   'Genshin Impact',
 ];
 
-const EXISTING_CATEGORIES = [
-  'Scale Figures (1/7 & 1/8)',
-  'Nendoroids & Chibis',
-  'Pop Up Parade',
-  'Action Statues & Dioramas',
-  'Limited Edition Resins',
-  'Art Figures',
+export const STORE_CATEGORIES = [
+  { name: 'Figures', slug: 'figures', emoji: '🥷', desc: 'Action Figures & Statues' },
+  { name: 'Katanas', slug: 'katanas', emoji: '🗡️', desc: 'Metal & Wood Nichirin Blades' },
+  { name: 'Keychains', slug: 'keychains', emoji: '🗝️', desc: 'Spinners, Charms & Emblems' },
+  { name: 'Clothing', slug: 'clothing', emoji: '🥋', desc: 'Streetwear, Hoodies & Tees' },
+  { name: 'Collectables', slug: 'collectables', emoji: '💎', desc: 'Plushies, Devil Fruits & Replicas' },
+  { name: 'Limited Editions', slug: 'limited-editions', emoji: '⭐', desc: 'Vault & Exclusive Collector Editions' },
 ];
 
 export function AdminProductsClient({ initialProducts }: { initialProducts: AdminProductItem[] }) {
   const [products, setProducts] = useState<AdminProductItem[]>(initialProducts);
   const [search, setSearch] = useState('');
   const [selectedFranchise, setSelectedFranchise] = useState('ALL');
+  const [selectedCategory, setSelectedCategory] = useState('ALL');
   const [selectedBadge, setSelectedBadge] = useState<'ALL' | 'NEW' | 'BESTSELLER' | 'LIMITED' | 'PREORDER'>('ALL');
   const [modalOpen, setModalOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -80,7 +81,7 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
   const [formAnime, setFormAnime] = useState('Naruto Shippuden');
   const [formCustomAnime, setFormCustomAnime] = useState('');
   const [formCharacter, setFormCharacter] = useState('');
-  const [formCategory, setFormCategory] = useState('Scale Figures (1/7 & 1/8)');
+  const [formCategory, setFormCategory] = useState('Figures');
   const [formBadge, setFormBadge] = useState<'standard' | 'new' | 'bestseller' | 'limited' | 'preorder'>('new');
   const [formDescription, setFormDescription] = useState('');
   const [formImage, setFormImage] = useState('');
@@ -269,6 +270,22 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
         selectedFranchise === 'ALL' ||
         (p.animeName || '').toLowerCase() === selectedFranchise.toLowerCase();
 
+      // Category
+      let matchCategory = true;
+      if (selectedCategory !== 'ALL') {
+        const cat = (p.categoryName || '').toLowerCase();
+        const target = selectedCategory.toLowerCase();
+        if (target === 'figures') {
+          matchCategory = cat.includes('figure') || cat.includes('statue');
+        } else if (target === 'collectables') {
+          matchCategory = cat.includes('collect') || cat.includes('plush');
+        } else if (target === 'limited editions') {
+          matchCategory = cat.includes('limited') || !!p.isLimitedEdition;
+        } else {
+          matchCategory = cat.includes(target);
+        }
+      }
+
       // Badge
       let matchBadge = true;
       if (selectedBadge === 'NEW') matchBadge = !!p.isNewArrival;
@@ -276,9 +293,9 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
       else if (selectedBadge === 'LIMITED') matchBadge = !!p.isLimitedEdition;
       else if (selectedBadge === 'PREORDER') matchBadge = !!p.isPreOrder;
 
-      return matchSearch && matchFranchise && matchBadge;
+      return matchSearch && matchFranchise && matchCategory && matchBadge;
     });
-  }, [products, search, selectedFranchise, selectedBadge]);
+  }, [products, search, selectedFranchise, selectedCategory, selectedBadge]);
 
   return (
     <div className="min-h-screen bg-gray-100 py-8">
@@ -338,10 +355,24 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
               onChange={(e) => setSelectedFranchise(e.target.value)}
               className="py-2 px-3 text-xs bg-gray-50 border border-gray-200 rounded-sm focus:border-brand-red outline-none"
             >
-              <option value="ALL">All Anime Franchises ({products.length})</option>
+              <option value="ALL">All Franchises ({products.length})</option>
               {EXISTING_ANIME.map((a) => (
                 <option key={a} value={a}>
                   {a}
+                </option>
+              ))}
+            </select>
+
+            {/* Category Dropdown */}
+            <select
+              value={selectedCategory}
+              onChange={(e) => setSelectedCategory(e.target.value)}
+              className="py-2 px-3 text-xs bg-gray-50 border border-gray-200 rounded-sm focus:border-brand-red outline-none font-semibold text-gray-700"
+            >
+              <option value="ALL">All Categories</option>
+              {STORE_CATEGORIES.map((c) => (
+                <option key={c.slug} value={c.name}>
+                  {c.emoji} {c.name}
                 </option>
               ))}
             </select>
@@ -421,12 +452,22 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
                         </div>
                       </td>
 
-                      {/* Franchise & Character */}
+                      {/* Franchise & Category */}
                       <td className="py-3.5 px-4">
                         <p className="font-bold text-gray-800">{product.animeName || '—'}</p>
-                        {product.characterName && (
-                          <p className="text-[10px] text-purple-700 font-semibold">{product.characterName}</p>
-                        )}
+                        <div className="flex flex-wrap items-center gap-1.5 mt-1">
+                          {product.characterName && (
+                            <span className="text-[10px] text-purple-700 font-semibold">{product.characterName}</span>
+                          )}
+                          {product.categoryName && (
+                            <span className="text-[9px] bg-gray-100 text-gray-700 px-1.5 py-0.5 rounded font-bold border border-gray-200 flex items-center gap-1">
+                              {STORE_CATEGORIES.find((c) =>
+                                product.categoryName?.toLowerCase().includes(c.name.toLowerCase().slice(0, 4))
+                              )?.emoji || '🏷️'}{' '}
+                              {product.categoryName}
+                            </span>
+                          )}
+                        </div>
                       </td>
 
                       {/* Price & Discount */}
@@ -716,16 +757,16 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
               {/* Category */}
               <div>
                 <label className="block font-bold uppercase tracking-wider text-gray-800 mb-1">
-                  4. Figure Category
+                  4. Store Category
                 </label>
                 <select
                   value={formCategory}
                   onChange={(e) => setFormCategory(e.target.value)}
-                  className="w-full py-2 px-3 bg-gray-50 border border-gray-200 rounded text-xs focus:border-brand-red outline-none"
+                  className="w-full py-2 px-3 bg-gray-50 border border-gray-200 rounded text-xs focus:border-brand-red outline-none font-medium"
                 >
-                  {EXISTING_CATEGORIES.map((c) => (
-                    <option key={c} value={c}>
-                      {c}
+                  {STORE_CATEGORIES.map((c) => (
+                    <option key={c.slug} value={c.name}>
+                      {c.emoji} {c.name} — {c.desc}
                     </option>
                   ))}
                 </select>

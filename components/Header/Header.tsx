@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useSession } from 'next-auth/react';
 import { motion } from 'framer-motion';
 import {
@@ -19,12 +20,12 @@ import { UserMenu } from './UserMenu';
 
 const navLinks = [
   { label: 'Shop', href: '/shop' },
-  { label: 'Archive Vault', href: '/archive' },
-  { label: 'Characters', href: '/characters' },
-  { label: 'Anime', href: '/anime' },
-  { label: 'New Arrivals', href: '/shop?filter=new' },
-  { label: 'Best Sellers', href: '/shop?filter=bestsellers' },
-  { label: 'Limited Edition', href: '/shop?filter=limited' },
+  { label: 'Figures', href: '/shop?category=figures' },
+  { label: 'Katanas', href: '/shop?category=katanas' },
+  { label: 'Keychains', href: '/shop?category=keychains' },
+  { label: 'Clothing', href: '/shop?category=clothing' },
+  { label: 'Collectables', href: '/shop?category=collectables' },
+  { label: 'New Drops', href: '/shop?filter=new' },
 ];
 
 export function Header() {
@@ -77,14 +78,19 @@ export function Header() {
             </span>
           </div>
 
-          {/* Logo */}
+          {/* Official BAKA Brand Logo with Luffy */}
           <Link
             href="/"
-            className="absolute left-1/2 -translate-x-1/2 lg:static lg:translate-x-0 flex items-center"
+            className="absolute left-1/2 -translate-x-1/2 lg:static lg:translate-x-0 flex items-center group py-1"
           >
-            <span className="font-heading text-2xl sm:text-3xl tracking-[0.15em] text-white hover:text-brand-red transition-colors duration-200">
-              OTAKUVERSE
-            </span>
+            <Image
+              src="/custom/baka_header_brand.png"
+              alt="BAKA - Clothing Style And More"
+              width={320}
+              height={88}
+              className="h-12 sm:h-14 lg:h-[64px] w-auto object-contain transition-all duration-300 group-hover:brightness-125 group-hover:drop-shadow-[0_0_16px_rgba(239,68,68,0.7)]"
+              priority
+            />
           </Link>
 
           {/* Desktop Nav */}

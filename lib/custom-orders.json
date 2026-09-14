@@ -1,0 +1,251 @@
+[
+  {
+    "id": "OTV-MU1IJKSK-KQSO",
+    "orderNumber": "OTV-MU1IJKSK-KQSO",
+    "userId": "3igfBn4ljic9EdwrXkTrkuiPIJL2",
+    "customer": {
+      "name": "user 1",
+      "email": "user1@gmail.com",
+      "phone": "111111111",
+      "uid": "3igfBn4ljic9EdwrXkTrkuiPIJL2"
+    },
+    "shippingAddress": {
+      "fullName": "user 1",
+      "phone": "1111111111",
+      "addressLine1": "vdfvv",
+      "addressLine2": "ffvfdv",
+      "city": "r",
+      "state": "Maharashtra",
+      "pinCode": "111111",
+      "country": "India"
+    },
+    "items": [
+      {
+        "productId": "prod-0004",
+        "name": "Satoru Gojo Cursed Energy Battle Articulated Figure",
+        "slug": "satoru-gojo-cursed-energy-battle-articulated-figure-4",
+        "image": "/catalog/action-figures/item-004.jpg",
+        "quantity": 3,
+        "price": 4299,
+        "characterName": "Gojo Satoru",
+        "animeName": "Jujutsu Kaisen",
+        "categoryName": ""
+      },
+      {
+        "productId": "game-ff-1",
+        "name": "Final Fantasy VII — Cloud Strife & Hardy Daytona",
+        "slug": "final-fantasy-vii-cloud-strife-hardy-daytona-1",
+        "image": "/archive/item-088.jpeg",
+        "quantity": 1,
+        "price": 9499,
+        "characterName": "",
+        "animeName": "",
+        "categoryName": ""
+      }
+    ],
+    "subtotal": 22396,
+    "shipping": 0,
+    "tax": 4031,
+    "discount": 0,
+    "total": 26427,
+    "couponCode": null,
+    "deliveryMethod": "standard",
+    "orderStatus": "PENDING",
+    "payment": {
+      "paymentStatus": "PENDING",
+      "paymentMethod": "RAZORPAY",
+      "paymentId": null,
+      "razorpayOrderId": null,
+      "razorpaySignature": null,
+      "amount": 26427,
+      "currency": "INR",
+      "createdAt": "2026-09-14T17:24:53.755Z"
+    },
+    "createdAt": "2026-09-14T17:24:53.755Z",
+    "updatedAt": "2026-09-14T17:24:53.756Z"
+  },
+  {
+    "id": "OTV-MU1I8RKY-NGK2",
+    "orderNumber": "OTV-MU1I8RKY-NGK2",
+    "userId": "guest-1789406188450",
+    "customer": {
+      "name": "Monkey D. Luffy",
+      "email": "luffy@strawhats.com",
+      "phone": "+91 98111 22233",
+      "uid": "guest-1789406188450"
+    },
+    "shippingAddress": {
+      "fullName": "Monkey D. Luffy",
+      "phone": "+91 98111 22233",
+      "addressLine1": "Thousand Sunny Deck, Pier 1",
+      "addressLine2": "Grand Line South",
+      "city": "Mumbai",
+      "state": "Maharashtra",
+      "pinCode": "400001",
+      "country": "India"
+    },
+    "items": [
+      {
+        "productId": "ultra-instinct-goku-dynamic-posable-action-figure-1",
+        "name": "Ultra Instinct Goku Dynamic Posable Action Figure",
+        "slug": "ultra-instinct-goku-dynamic-posable-action-figure-1",
+        "image": "/catalog/action-figures/item-001.jpg",
+        "quantity": 2,
+        "price": 3499,
+        "characterName": "Goku",
+        "animeName": "Dragon Ball Super",
+        "categoryName": ""
+      },
+      {
+        "productId": "tanjiro-kamado-hinokami-kagura-effect-posable-figure-5",
+        "name": "Tanjiro Kamado Hinokami Kagura Effect Posable Figure",
+        "slug": "tanjiro-kamado-hinokami-kagura-effect-posable-figure-5",
+        "image": "/catalog/action-figures/item-005.jpg",
+        "quantity": 1,
+        "price": 3199,
+        "characterName": "Tanjiro Kamado",
+        "animeName": "Demon Slayer",
+        "categoryName": ""
+      }
+    ],
+    "subtotal": 10197,
+    "shipping": 0,
+    "tax": 1835,
+    "discount": 0,
+    "total": 12032,
+    "couponCode": null,
+    "deliveryMethod": "standard",
+    "orderStatus": "CONFIRMED",
+    "payment": {
+      "paymentStatus": "PENDING",
+      "paymentMethod": "COD",
+      "paymentId": null,
+      "razorpayOrderId": null,
+      "razorpaySignature": null,
+      "amount": 12032,
+      "currency": "INR",
+      "createdAt": "2026-09-14T17:16:28.450Z"
+    },
+    "createdAt": "2026-09-14T17:16:28.450Z",
+    "updatedAt": "2026-09-14T17:16:28.451Z"
+  },
+  {
+    "id": "OTV-MU1I7DC4-PDF3",
+    "orderNumber": "OTV-MU1I7DC4-PDF3",
+    "userId": "fLQOpZwFaKfZehIOswCMJubOxQs1",
+    "customer": {
+      "name": "user2 ty",
+      "email": "user2@gmail.com",
+      "phone": "1111111111",
+      "uid": "fLQOpZwFaKfZehIOswCMJubOxQs1"
+    },
+    "shippingAddress": {
+      "fullName": "user2",
+      "phone": "1111111111",
+      "addressLine1": "jtyjtyjytj",
+      "addressLine2": "tyjytjytjyj",
+      "city": "tyjtyjytjyjyt",
+      "state": "Maharashtra",
+      "pinCode": "112222",
+      "country": "India"
+    },
+    "items": [
+      {
+        "productId": "trend-1",
+        "name": "Spider-Man Integrated Suit vs Doc Ock 3D Battle Diorama",
+        "slug": "spiderman-doc-ock-battle-diorama",
+        "image": "/custom/spiderman_trending_3d.jpg",
+        "quantity": 1,
+        "price": 6499,
+        "characterName": "Spider-Man",
+        "animeName": "Marvel",
+        "categoryName": ""
+      },
+      {
+        "productId": "prod-allstar-01",
+        "name": "All-Star Anime Vault Ultimate Collection",
+        "slug": "all-star-anime-vault",
+        "image": "/custom/anime_allstar_bg.jpg",
+        "quantity": 1,
+        "price": 9999,
+        "characterName": "Multiple Heroes",
+        "animeName": "Various",
+        "categoryName": ""
+      }
+    ],
+    "subtotal": 16498,
+    "shipping": 0,
+    "tax": 2970,
+    "discount": 0,
+    "total": 19468,
+    "couponCode": null,
+    "deliveryMethod": "standard",
+    "orderStatus": "PENDING",
+    "payment": {
+      "paymentStatus": "PENDING",
+      "paymentMethod": "RAZORPAY",
+      "paymentId": null,
+      "razorpayOrderId": null,
+      "razorpaySignature": null,
+      "amount": 19468,
+      "currency": "INR",
+      "createdAt": "2026-09-14T17:15:24.189Z"
+    },
+    "createdAt": "2026-09-14T17:15:24.189Z",
+    "updatedAt": "2026-09-14T17:15:24.191Z"
+  },
+  {
+    "id": "OTV-TEST-123",
+    "orderNumber": "OTV-TEST-123",
+    "userId": "",
+    "customer": {
+      "name": "Test Zoro",
+      "email": "zoro@test.com",
+      "phone": "9876543210",
+      "uid": ""
+    },
+    "shippingAddress": {
+      "fullName": "Test Zoro",
+      "phone": "9876543210",
+      "addressLine1": "Test St",
+      "addressLine2": "",
+      "city": "Mumbai",
+      "state": "MH",
+      "pinCode": "400001",
+      "country": "India"
+    },
+    "items": [
+      {
+        "productId": "p1",
+        "name": "Zoro Action Figure",
+        "slug": "",
+        "image": "",
+        "quantity": 1,
+        "price": 2999,
+        "characterName": "",
+        "animeName": "",
+        "categoryName": ""
+      }
+    ],
+    "subtotal": 0,
+    "shipping": 0,
+    "tax": 0,
+    "discount": 0,
+    "total": 2999,
+    "couponCode": null,
+    "deliveryMethod": "standard",
+    "orderStatus": "CONFIRMED",
+    "payment": {
+      "paymentStatus": "PENDING",
+      "paymentMethod": "COD",
+      "paymentId": null,
+      "razorpayOrderId": null,
+      "razorpaySignature": null,
+      "amount": 2999,
+      "currency": "INR",
+      "createdAt": "2026-09-14T17:06:18.783Z"
+    },
+    "createdAt": "2026-09-14T17:06:18.783Z",
+    "updatedAt": "2026-09-14T17:06:18.783Z"
+  }
+]

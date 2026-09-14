@@ -93,15 +93,15 @@ export default async function AdminOrderDetailPage(props: {
           customerUid: dbOrder.userId || 'N/A',
           shippingAddress: dbOrder.address
             ? {
-                fullName: dbOrder.address.name,
-                phone: dbOrder.address.phone,
-                addressLine1: dbOrder.address.line1,
-                addressLine2: dbOrder.address.line2 || '',
-                city: dbOrder.address.city,
-                state: dbOrder.address.state,
-                pinCode: dbOrder.address.pincode,
-                country: dbOrder.address.country,
-              }
+              fullName: dbOrder.address.name,
+              phone: dbOrder.address.phone,
+              addressLine1: dbOrder.address.line1,
+              addressLine2: dbOrder.address.line2 || '',
+              city: dbOrder.address.city,
+              state: dbOrder.address.state,
+              pinCode: dbOrder.address.pincode,
+              country: dbOrder.address.country,
+            }
             : null,
           items: dbOrder.items.map((i) => ({
             productId: i.productId,
@@ -178,19 +178,18 @@ export default async function AdminOrderDetailPage(props: {
 
           <div className="flex items-center gap-3">
             <span
-              className={`px-3 py-1.5 text-xs font-bold uppercase rounded-sm ${
-                order.orderStatus === 'DELIVERED'
+              className={`px-3 py-1.5 text-xs font-bold uppercase rounded-sm ${order.orderStatus === 'DELIVERED'
                   ? 'bg-green-100 text-green-800'
                   : order.orderStatus === 'SHIPPED'
-                  ? 'bg-blue-100 text-blue-800'
-                  : order.orderStatus === 'PROCESSING'
-                  ? 'bg-purple-100 text-purple-800'
-                  : order.orderStatus === 'CONFIRMED'
-                  ? 'bg-emerald-100 text-emerald-800'
-                  : order.orderStatus === 'CANCELLED'
-                  ? 'bg-red-100 text-red-800'
-                  : 'bg-yellow-100 text-yellow-800'
-              }`}
+                    ? 'bg-blue-100 text-blue-800'
+                    : order.orderStatus === 'PROCESSING'
+                      ? 'bg-purple-100 text-purple-800'
+                      : order.orderStatus === 'CONFIRMED'
+                        ? 'bg-emerald-100 text-emerald-800'
+                        : order.orderStatus === 'CANCELLED'
+                          ? 'bg-red-100 text-red-800'
+                          : 'bg-yellow-100 text-yellow-800'
+                }`}
             >
               Status: {order.orderStatus}
             </span>
@@ -515,11 +514,10 @@ export default async function AdminOrderDetailPage(props: {
                 <div>
                   <span className="text-gray-400 block text-[10px] uppercase">Payment Status</span>
                   <span
-                    className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase rounded-sm mt-0.5 ${
-                      order.payment?.paymentStatus === 'PAID'
+                    className={`inline-block px-2 py-0.5 text-[10px] font-bold uppercase rounded-sm mt-0.5 ${order.payment?.paymentStatus === 'PAID'
                         ? 'bg-emerald-100 text-emerald-800'
                         : 'bg-orange-100 text-orange-800'
-                    }`}
+                      }`}
                   >
                     {order.payment?.paymentStatus || 'PENDING'}
                   </span>
