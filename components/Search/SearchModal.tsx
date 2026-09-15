@@ -137,9 +137,9 @@ export function SearchModal({ isOpen, onClose }: SearchModalProps) {
                 results.length > 0 ? (
                   <>
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-4">
-                      {results.map((product) => (
+                      {results.map((product, idx) => (
                         <Link
-                          key={product.id}
+                          key={product.id || (product as any)._id || product.slug || `res-${idx}`}
                           href={`/product/${product.slug}`}
                           onClick={onClose}
                           className="flex items-center gap-3 p-3 hover:bg-gray-50 transition-colors group"

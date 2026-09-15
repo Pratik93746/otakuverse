@@ -14,6 +14,7 @@ export interface DbUser {
 
 export interface DbProduct {
   _id?: any;
+  id?: string;
   name: string;
   slug: string;
   price: number;

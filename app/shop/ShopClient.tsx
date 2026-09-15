@@ -87,7 +87,11 @@ export default function ShopClient({ initialFilter, initialCategory, initialAnim
     try {
       const res = await fetch(`/api/products?${params.toString()}&limit=24`);
       const data = await res.json();
-      setProducts(data.products ?? []);
+      const loaded = (data.products ?? []).map((p: any) => ({
+        ...p,
+        id: p.id || p._id || p.slug,
+      }));
+      setProducts(loaded);
       setTotal(data.pagination?.total ?? 0);
       setTotalPages(data.pagination?.totalPages ?? 1);
     } catch {
@@ -288,9 +292,10 @@ export default function ShopClient({ initialFilter, initialCategory, initialAnim
             'grid gap-3 md:gap-4',
             columns === 4 ? 'grid-cols-2 md:grid-cols-3 lg:grid-cols-4' : 'grid-cols-2 md:grid-cols-2'
           )}>
-            {products.map((product) => (
-              <ProductCard key={product.id} product={product} />
-            ))}
+            {products.map((product, idx) => {
+              const itemKey = product.id || (product as any)._id || product.slug || `shop-prod-${idx}`;
+              return <ProductCard key={itemKey} product={product} />;
+            })}
           </div>
         )}
 

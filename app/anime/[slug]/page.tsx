@@ -149,15 +149,17 @@ export default async function AnimePage({ params }: Props) {
           </div>
         ) : (
           <div className="product-grid">
-            {anime.products.map((p: any) => (
-              <ProductCard
-                key={p.id}
-                product={{
-                  id: p.id,
-                  name: p.name,
-                  slug: p.slug,
-                  price: p.price,
-                  compareAtPrice: p.compareAtPrice ?? undefined,
+            {anime.products.map((p: any, idx: number) => {
+              const pid = p.id || p._id?.toString() || p.slug || `anime-prod-${idx}`;
+              return (
+                <ProductCard
+                  key={pid}
+                  product={{
+                    id: pid,
+                    name: p.name,
+                    slug: p.slug,
+                    price: p.price,
+                    compareAtPrice: p.compareAtPrice ?? undefined,
                   image: p.images?.[0]?.url ?? p.image ?? '',
                   characterName: p.character?.name ?? p.characterName,
                   animeName: anime.name,
@@ -171,7 +173,8 @@ export default async function AnimePage({ params }: Props) {
                   description: p.description,
                 }}
               />
-            ))}
+            );
+          })}
           </div>
         )}
       </div>

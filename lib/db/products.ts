@@ -118,8 +118,14 @@ export async function getProducts(options: ProductQueryOptions = {}) {
     ]);
 
     if (products && products.length > 0) {
+      const formattedProducts = products.map((p) => ({
+        ...p,
+        id: p._id ? p._id.toString() : ((p as any).id || p.slug),
+        _id: p._id ? p._id.toString() : undefined,
+      }));
+
       return {
-        products,
+        products: formattedProducts,
         pagination: {
           page,
           limit,
@@ -135,6 +141,7 @@ export async function getProducts(options: ProductQueryOptions = {}) {
   // Graceful fallback to MOCK_PRODUCTS when database is unreachable
   let fallback = MOCK_PRODUCTS.map((m) => ({
     ...m,
+    id: m.id || m.slug,
     _id: m.id as any,
     isPublished: true,
     createdAt: new Date(),
@@ -167,10 +174,18 @@ export async function getProductBySlug(slug: string): Promise<DbProduct | null> 
   if (!slug) return null;
   try {
     const col = await getProductsCollection();
-    return await col.findOne({ slug });
+    const prod = await col.findOne({ slug });
+    if (prod) {
+      return {
+        ...prod,
+        id: prod._id?.toString() || (prod as any).id || prod.slug,
+        _id: prod._id?.toString(),
+      };
+    }
+    return null;
   } catch {
     const m = MOCK_PRODUCTS.find((p) => p.slug === slug);
-    return m ? ({ ...m, _id: m.id as any, isPublished: true, createdAt: new Date(), updatedAt: new Date() } as any) : null;
+    return m ? ({ ...m, id: m.id || m.slug, _id: m.id as any, isPublished: true, createdAt: new Date(), updatedAt: new Date() } as any) : null;
   }
 }
 
@@ -181,31 +196,54 @@ export async function getProductByIdOrSlug(idOrSlug: string): Promise<DbProduct 
 
     // Try slug first
     let prod = await col.findOne({ slug: idOrSlug });
-    if (prod) return prod;
+    if (prod) {
+      return {
+        ...prod,
+        id: prod._id?.toString() || (prod as any).id || prod.slug,
+        _id: prod._id?.toString(),
+      };
+    }
 
     // Try Mongo ObjectId
     if (ObjectId.isValid(idOrSlug)) {
       prod = await col.findOne({ _id: new ObjectId(idOrSlug) as any });
-      if (prod) return prod;
+      if (prod) {
+        return {
+          ...prod,
+          id: prod._id?.toString() || (prod as any).id || prod.slug,
+          _id: prod._id?.toString(),
+        };
+      }
     }
 
     // Try name match
     prod = await col.findOne({ name: { $regex: `^${idOrSlug}$`, $options: 'i' } });
-    if (prod) return prod;
+    if (prod) {
+      return {
+        ...prod,
+        id: prod._id?.toString() || (prod as any).id || prod.slug,
+        _id: prod._id?.toString(),
+      };
+    }
   } catch {
     // fallback
   }
 
   const m = MOCK_PRODUCTS.find((p) => p.slug === idOrSlug || p.id === idOrSlug);
-  return m ? ({ ...m, _id: m.id as any, isPublished: true, createdAt: new Date(), updatedAt: new Date() } as any) : null;
+  return m ? ({ ...m, id: m.id || m.slug, _id: m.id as any, isPublished: true, createdAt: new Date(), updatedAt: new Date() } as any) : null;
 }
 
 export async function getAllProductsAdmin(): Promise<DbProduct[]> {
   try {
     const col = await getProductsCollection();
-    return await col.find({}).sort({ createdAt: -1 }).toArray();
+    const prods = await col.find({}).sort({ createdAt: -1 }).toArray();
+    return prods.map((p) => ({
+      ...p,
+      id: p._id?.toString() || (p as any).id || p.slug,
+      _id: p._id?.toString(),
+    }));
   } catch {
-    return MOCK_PRODUCTS.map((m) => ({ ...m, _id: m.id as any, isPublished: true, createdAt: new Date(), updatedAt: new Date() })) as any[];
+    return MOCK_PRODUCTS.map((m) => ({ ...m, id: m.id || m.slug, _id: m.id as any, isPublished: true, createdAt: new Date(), updatedAt: new Date() })) as any[];
   }
 }
 

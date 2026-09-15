@@ -9,6 +9,9 @@ import { MOCK_PRODUCTS } from '@/lib/mockProducts';
 import { Package, ArrowUpRight } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function AdminOrdersPage() {
   const session = await getServerSession(authOptions);
 

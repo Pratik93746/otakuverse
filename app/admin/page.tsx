@@ -20,6 +20,9 @@ import { formatPrice } from '@/lib/utils';
 import { AdminNav } from '@/components/Admin/AdminNav';
 import { AdminAuthGate } from '@/components/Admin/AdminAuthGate';
 
+export const dynamic = 'force-dynamic';
+export const revalidate = 0;
+
 export default async function AdminDashboardPage() {
   const session = await getServerSession(authOptions);
 

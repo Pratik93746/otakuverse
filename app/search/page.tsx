@@ -29,7 +29,11 @@ function SearchComponent() {
     try {
       const res = await fetch(`/api/products?q=${encodeURIComponent(q)}&limit=20`);
       const data = await res.json();
-      setProducts(data.products ?? []);
+      const loaded = (data.products ?? []).map((p: any) => ({
+        ...p,
+        id: p.id || p._id || p.slug,
+      }));
+      setProducts(loaded);
       setTotal(data.pagination?.total ?? 0);
     } catch {
       setProducts([]);
@@ -95,8 +99,8 @@ function SearchComponent() {
           </div>
         ) : products.length > 0 ? (
           <div className="product-grid">
-            {products.map((p) => (
-              <ProductCard key={p.id} product={p} />
+            {products.map((p, idx) => (
+              <ProductCard key={p.id || (p as any)._id || p.slug || `search-${idx}`} product={p} />
             ))}
           </div>
         ) : q ? (

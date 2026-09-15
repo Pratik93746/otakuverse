@@ -12,7 +12,8 @@ import { useRouter } from 'next/navigation';
 import { useRequireAuth } from '@/lib/useRequireAuth';
 
 export interface ProductCardData {
-  id: string;
+  id?: string;
+  _id?: any;
   name: string;
   slug: string;
   price: number;
@@ -46,10 +47,11 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
     setMounted(true);
   }, []);
 
+  const prodId = product.id || product._id?.toString() || product.slug;
   const addItem = useCartStore((s) => s.addItem);
   const { requireAuth } = useRequireAuth();
   const { toggleItem, isWishlisted } = useWishlistStore();
-  const wishlisted = mounted && isWishlisted(product.id);
+  const wishlisted = mounted && isWishlisted(prodId);
   const discount = calculateDiscount(product.price, product.compareAtPrice ?? 0);
   const isSoldOut = product.isSoldOut || product.stock === 0;
 
@@ -60,8 +62,8 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
     if (!requireAuth()) return;
 
     addItem({
-      id: product.id,
-      productId: product.id,
+      id: prodId,
+      productId: prodId,
       name: product.name,
       slug: product.slug,
       image: product.image ?? '',
@@ -79,8 +81,8 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
     if (!requireAuth(undefined, '/checkout')) return;
 
     addItem({
-      id: product.id,
-      productId: product.id,
+      id: prodId,
+      productId: prodId,
       name: product.name,
       slug: product.slug,
       image: product.image ?? '',
@@ -96,7 +98,7 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
     e.preventDefault();
     e.stopPropagation();
     toggleItem({
-      productId: product.id,
+      productId: prodId,
       name: product.name,
       slug: product.slug,
       image: product.image ?? '',
