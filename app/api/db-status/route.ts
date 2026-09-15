@@ -1,9 +1,15 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { getMongoClient } from '@/lib/mongodb';
+import { verifyAdminRequest } from '@/lib/admin-auth';
 
 export const dynamic = 'force-dynamic';
 
-export async function GET() {
+export async function GET(request: NextRequest) {
+  const isAdmin = await verifyAdminRequest(request);
+  if (!isAdmin) {
+    return NextResponse.json({ error: 'Unauthorized: Admin privileges required' }, { status: 403 });
+  }
+
   const rawUri = process.env.MONGODB_URI || '';
   const hasUri = rawUri.trim().length > 0;
   const sanitizedHost = rawUri.includes('@') ? rawUri.split('@')[1]?.split('/')[0] : 'NO_HOST';

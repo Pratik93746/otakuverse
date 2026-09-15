@@ -1,10 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminUser, handleAuthError } from '@/lib/firebase-admin';
+import { verifyAdminRequest } from '@/lib/admin-auth';
 import { getAllOrders } from '@/lib/db/orders';
 
 export async function GET(request: NextRequest) {
   try {
-    await requireAdminUser(request);
+    const isAdmin = await verifyAdminRequest(request);
+    if (!isAdmin) {
+      return NextResponse.json({ error: 'Unauthorized: Admin privileges required' }, { status: 403 });
+    }
     const orders = await getAllOrders();
 
     return NextResponse.json({
@@ -34,7 +37,8 @@ export async function GET(request: NextRequest) {
         updatedAt: o.updatedAt?.toISOString(),
       })),
     });
-  } catch (err) {
-    return handleAuthError(err);
+  } catch (err: any) {
+    console.error('Admin orders error:', err);
+    return NextResponse.json({ error: err?.message || 'Server error' }, { status: 500 });
   }
 }

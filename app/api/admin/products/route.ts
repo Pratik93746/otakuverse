@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireAdminUser, isAllowedAdminEmail } from '@/lib/firebase-admin';
+import { verifyAdminRequest } from '@/lib/admin-auth';
 import {
   getAllProductsAdmin,
   createProduct,
@@ -7,39 +7,10 @@ import {
   updateProductStock,
   deleteProduct,
 } from '@/lib/db/products';
-import { getServerSession } from 'next-auth';
-import { authOptions } from '@/lib/auth';
-
-async function verifyAdmin(request: NextRequest): Promise<boolean> {
-  // 1. Try Firebase Bearer Token
-  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
-  if (authHeader && authHeader.startsWith('Bearer ')) {
-    try {
-      await requireAdminUser(request);
-      return true;
-    } catch {
-      // fallback
-    }
-  }
-
-  // 2. Try NextAuth session cookie
-  try {
-    const session = await getServerSession(authOptions);
-    if (session?.user) {
-      if (session.user.role === 'ADMIN' || (session.user.email && isAllowedAdminEmail(session.user.email))) {
-        return true;
-      }
-    }
-  } catch {
-    // ignore
-  }
-
-  return false;
-}
 
 export async function GET(request: NextRequest) {
   try {
-    const isAdmin = await verifyAdmin(request);
+    const isAdmin = await verifyAdminRequest(request);
     if (!isAdmin) {
       return NextResponse.json({ error: 'Unauthorized: Admin privileges required' }, { status: 403 });
     }
@@ -58,7 +29,7 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const isAdmin = await verifyAdmin(request);
+    const isAdmin = await verifyAdminRequest(request);
     if (!isAdmin) {
       return NextResponse.json({ error: 'Unauthorized: Admin privileges required' }, { status: 403 });
     }
@@ -140,7 +111,7 @@ export async function POST(request: NextRequest) {
 
 export async function PATCH(request: NextRequest) {
   try {
-    const isAdmin = await verifyAdmin(request);
+    const isAdmin = await verifyAdminRequest(request);
     if (!isAdmin) {
       return NextResponse.json({ error: 'Unauthorized: Admin privileges required' }, { status: 403 });
     }
@@ -173,7 +144,7 @@ export async function PATCH(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const isAdmin = await verifyAdmin(request);
+    const isAdmin = await verifyAdminRequest(request);
     if (!isAdmin) {
       return NextResponse.json({ error: 'Unauthorized: Admin privileges required' }, { status: 403 });
     }
