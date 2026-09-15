@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import crypto from 'crypto';
 import { updateOrderPayment, getOrderByNumber } from '@/lib/db/orders';
+import { verifyPaymentSignature } from '@/lib/razorpay';
 
 export async function POST(request: NextRequest) {
   try {
@@ -18,13 +18,19 @@ export async function POST(request: NextRequest) {
 
     // Verify signature if Razorpay keys are configured
     const secret = process.env.RAZORPAY_KEY_SECRET;
-    if (secret && razorpayOrderId && razorpayPaymentId && razorpaySignature) {
-      const expectedSignature = crypto
-        .createHmac('sha256', secret)
-        .update(`${razorpayOrderId}|${razorpayPaymentId}`)
-        .digest('hex');
-
-      if (expectedSignature !== razorpaySignature) {
+    if (secret) {
+      if (!razorpayOrderId || !razorpayPaymentId || !razorpaySignature) {
+        return NextResponse.json(
+          { error: 'Missing payment signature verification fields' },
+          { status: 400 }
+        );
+      }
+      const isValid = verifyPaymentSignature({
+        orderId: razorpayOrderId,
+        paymentId: razorpayPaymentId,
+        signature: razorpaySignature,
+      });
+      if (!isValid) {
         return NextResponse.json({ error: 'Invalid payment signature' }, { status: 400 });
       }
     }

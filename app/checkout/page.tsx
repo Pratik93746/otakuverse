@@ -461,46 +461,90 @@ export default function CheckoutPage() {
   };
 
   const loadRazorpay = async (orderData: { razorpayOrderId: string; orderNumber: string }) => {
-    const script = document.createElement('script');
-    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
-    document.body.appendChild(script);
-
-    script.onload = () => {
+    const launchModal = () => {
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID,
-        amount: total * 100,
+        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_TcDWGoTSYCyd2A',
+        amount: Math.round(total * 100),
         currency: 'INR',
-        name: 'BAKA',
-        description: 'Anime Collectibles Order',
+        name: 'BAKA STYLE',
+        description: `Anime Figures Order #${orderData.orderNumber}`,
         order_id: orderData.razorpayOrderId,
         prefill: {
-          name: address.name,
+          name: address.name || `${customerInfo.firstName} ${customerInfo.lastName}`.trim() || 'Collector',
           email: customerInfo.email,
-          contact: address.phone,
+          contact: address.phone || customerInfo.phone,
         },
         theme: { color: '#E63329' },
-        handler: async (response: { razorpay_payment_id: string; razorpay_order_id: string; razorpay_signature: string }) => {
+        modal: {
+          ondismiss: () => {
+            toast('Payment cancelled or closed.', { icon: '⚠️' });
+            setLoading(false);
+          },
+        },
+        handler: async (response: {
+          razorpay_payment_id: string;
+          razorpay_order_id: string;
+          razorpay_signature: string;
+        }) => {
           try {
-            await fetchWithAuth('/api/orders/verify-payment', {
+            const verifyRes = await fetchWithAuth('/api/verify-payment', {
               method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
-                razorpayPaymentId: response.razorpay_payment_id,
-                razorpayOrderId: response.razorpay_order_id,
-                razorpaySignature: response.razorpay_signature,
+                order_id: response.razorpay_order_id,
+                payment_id: response.razorpay_payment_id,
+                razorpay_signature: response.razorpay_signature,
                 orderNumber: orderData.orderNumber,
               }),
             });
-            clearCart();
-            setOrderId(orderData.orderNumber);
-            setStep(4);
-          } catch {
-            toast.error('Payment verification failed. Contact support.');
+            const verifyData = await verifyRes.json();
+
+            if (verifyRes.ok && verifyData.success) {
+              clearCart();
+              setOrderId(orderData.orderNumber);
+              setStep(4);
+              toast.success('Payment verified successfully! Order placed.', { icon: '🎉' });
+            } else {
+              toast.error(verifyData.error || 'Payment signature mismatch. Please contact support.');
+            }
+          } catch (err: any) {
+            console.error('Verification error:', err);
+            toast.error('Payment verification request failed. Please check your network.');
+          } finally {
+            setLoading(false);
           }
         },
       };
-      const rzp = new (window as typeof window & { Razorpay: new (opts: unknown) => { open(): void } }).Razorpay(options);
+
+      const rzp = new (window as any).Razorpay(options);
+      rzp.on('payment.failed', (response: any) => {
+        console.error('Razorpay payment failed:', response.error);
+        toast.error(response.error?.description || 'Payment failed. Please try another method.');
+        setLoading(false);
+      });
       rzp.open();
     };
+
+    if (typeof window !== 'undefined' && (window as any).Razorpay) {
+      launchModal();
+      return;
+    }
+
+    const existingScript = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
+    if (existingScript) {
+      existingScript.addEventListener('load', launchModal);
+      return;
+    }
+
+    const script = document.createElement('script');
+    script.src = 'https://checkout.razorpay.com/v1/checkout.js';
+    script.async = true;
+    script.onload = launchModal;
+    script.onerror = () => {
+      toast.error('Failed to load Razorpay payment gateway. Please check your connection.');
+      setLoading(false);
+    };
+    document.body.appendChild(script);
   };
 
   if (!mounted) {
