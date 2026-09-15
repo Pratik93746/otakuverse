@@ -1,11 +1,12 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
   Heart, ShoppingBag, Zap, Star, Minus, Plus,
   ChevronRight, RotateCcw, Package, Shield, Truck,
+  Bell, ShieldCheck, Award,
 } from 'lucide-react';
 import { formatPrice, calculateDiscount, cn } from '@/lib/utils';
 import { useCartStore } from '@/store/cart';
@@ -15,6 +16,8 @@ import Model3DViewer from '@/components/Product/Model3DViewer';
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { useRequireAuth } from '@/lib/useRequireAuth';
+import { BackInStockModal } from '@/components/Product/BackInStockModal';
+import { RecentlyViewed, saveRecentlyViewed } from '@/components/Product/RecentlyViewed';
 
 // Types
 interface ProductImage { id: string; url: string; alt?: string | null; isMain: boolean; sortOrder: number; }
@@ -69,8 +72,20 @@ export function ProductPageClient({ product, related }: ProductPageClientProps) 
   const [quantity, setQuantity] = useState(1);
   const [activeTab, setActiveTab] = useState('Description');
   const [viewerMode, setViewerMode] = useState<'gallery' | '360' | '3d'>('gallery');
+  const [isNotifyOpen, setIsNotifyOpen] = useState(false);
   const router = useRouter();
   const { requireAuth } = useRequireAuth();
+
+  useEffect(() => {
+    saveRecentlyViewed({
+      id: product.id,
+      name: product.name,
+      slug: product.slug,
+      price: product.price,
+      compareAtPrice: product.compareAtPrice,
+      image: product.images[0]?.url || '',
+    });
+  }, [product.id, product.name, product.slug, product.price, product.compareAtPrice, product.images]);
 
   const addItem = useCartStore((s) => s.addItem);
   const openCart = useCartStore((s) => s.openCart);
@@ -335,9 +350,19 @@ export function ProductPageClient({ product, related }: ProductPageClientProps) 
             {/* Action Buttons */}
             <div className="space-y-3 mb-8">
               {isSoldOut ? (
-                <button disabled className="btn-dark w-full justify-center py-4 opacity-60 cursor-not-allowed">
-                  SOLD OUT
-                </button>
+                <div className="space-y-2">
+                  <button disabled className="btn-dark w-full justify-center py-4 opacity-60 cursor-not-allowed">
+                    SOLD OUT
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setIsNotifyOpen(true)}
+                    className="w-full py-3.5 bg-red-50 hover:bg-red-100 text-brand-red border-2 border-brand-red font-heading tracking-widest text-xs flex items-center justify-center gap-2 transition-colors uppercase font-bold"
+                  >
+                    <Bell className="w-4 h-4" />
+                    NOTIFY ME WHEN RESTOCKED
+                  </button>
+                </div>
               ) : product.isPreOrder ? (
                 <button onClick={handleAddToCart} className="btn-primary w-full justify-center py-4">
                   <ShoppingBag className="w-4 h-4" />
@@ -370,15 +395,21 @@ export function ProductPageClient({ product, related }: ProductPageClientProps) 
             </div>
 
             {/* Trust Bar */}
-            <div className="border-t border-gray-100 pt-6 space-y-3">
+            <div className="border-t border-gray-100 pt-6 space-y-3.5">
               {[
-                { icon: Shield, text: '100% Authentic Product' },
-                { icon: Package, text: 'Collector-Safe Packaging' },
-                { icon: Truck, text: 'Fast Pan-India Delivery' },
-              ].map(({ icon: Icon, text }) => (
-                <div key={text} className="flex items-center gap-3 text-sm text-gray-600">
-                  <Icon className="w-4 h-4 text-green-500 flex-shrink-0" />
-                  {text}
+                { icon: ShieldCheck, title: '100% Authentic Import', desc: 'Direct from licensed Japanese manufacturers with official holographic seal.' },
+                { icon: Package, title: 'Double-Boxed Collector Packaging', desc: 'Heavy-duty bubble wrap, foam corner guards, and rigid crush-resistant boxes.' },
+                { icon: Award, title: '7-Day Transit Damage Guarantee', desc: 'Hassle-free replacement if damaged during shipping.' },
+                { icon: Truck, title: 'Express Insured Delivery', desc: 'Real-time courier tracking via BlueDart, Delhivery & Shiprocket.' },
+              ].map(({ icon: Icon, title, desc }) => (
+                <div key={title} className="flex items-start gap-3 text-xs">
+                  <div className="w-6 h-6 rounded-full bg-red-50 text-brand-red flex items-center justify-center flex-shrink-0 mt-0.5">
+                    <Icon className="w-3.5 h-3.5" />
+                  </div>
+                  <div>
+                    <span className="font-bold text-gray-900 block">{title}</span>
+                    <span className="text-gray-500 text-[11px] leading-relaxed">{desc}</span>
+                  </div>
                 </div>
               ))}
             </div>
@@ -503,6 +534,17 @@ export function ProductPageClient({ product, related }: ProductPageClientProps) 
             </div>
           </div>
         )}
+
+        {/* Recently Viewed Figures */}
+        <RecentlyViewed currentSlug={product.slug} />
+
+        {/* Back In Stock Lead Capture Modal */}
+        <BackInStockModal
+          isOpen={isNotifyOpen}
+          onClose={() => setIsNotifyOpen(false)}
+          productName={product.name}
+          productSlug={product.slug}
+        />
       </div>
     </div>
   );

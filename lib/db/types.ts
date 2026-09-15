@@ -111,6 +111,13 @@ export interface OrderPayment {
   createdAt: Date;
 }
 
+export interface OrderTracking {
+  carrier?: string;
+  trackingNumber?: string;
+  trackingUrl?: string;
+  shippedAt?: Date;
+}
+
 export interface DbOrder {
   _id?: any;
   orderNumber: string;
@@ -127,6 +134,7 @@ export interface DbOrder {
   deliveryMethod: string;
   orderStatus: OrderStatus;
   payment: OrderPayment;
+  tracking?: OrderTracking;
   createdAt: Date;
   updatedAt: Date;
 }

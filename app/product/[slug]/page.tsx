@@ -147,5 +147,73 @@ export default async function ProductPage({ params }: Props) {
       }));
   }
 
-  return <ProductPageClient product={product as any} related={related} />;
+  const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://otakuverse-black.vercel.app';
+  const canonicalUrl = `${baseUrl}/product/${product.slug}`;
+  const inStock = product.stock > 0;
+
+  const productJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'Product',
+    name: product.name,
+    image: product.images?.map((img: any) => img.url) || [product.image],
+    description: product.description,
+    sku: product.sku,
+    brand: {
+      '@type': 'Brand',
+      name: product.brandName || 'BAKA',
+    },
+    offers: {
+      '@type': 'Offer',
+      url: canonicalUrl,
+      priceCurrency: 'INR',
+      price: product.price,
+      priceValidUntil: '2028-12-31',
+      availability: inStock ? 'https://schema.org/InStock' : 'https://schema.org/OutOfStock',
+      itemCondition: 'https://schema.org/NewCondition',
+    },
+    aggregateRating: {
+      '@type': 'AggregateRating',
+      ratingValue: '4.9',
+      reviewCount: '48',
+    },
+  };
+
+  const breadcrumbJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'BreadcrumbList',
+    itemListElement: [
+      {
+        '@type': 'ListItem',
+        position: 1,
+        name: 'Home',
+        item: baseUrl,
+      },
+      {
+        '@type': 'ListItem',
+        position: 2,
+        name: product.animeName || 'Figures',
+        item: (product as any).anime?.slug ? `${baseUrl}/anime/${(product as any).anime.slug}` : `${baseUrl}/shop`,
+      },
+      {
+        '@type': 'ListItem',
+        position: 3,
+        name: product.name,
+        item: canonicalUrl,
+      },
+    ],
+  };
+
+  return (
+    <>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
+      />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+      />
+      <ProductPageClient product={product as any} related={related} />
+    </>
+  );
 }

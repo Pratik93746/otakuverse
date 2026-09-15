@@ -4,6 +4,7 @@ import { authOptions } from '@/lib/auth';
 import { getOrderByNumber } from '@/lib/db/orders';
 import { AdminNav } from '@/components/Admin/AdminNav';
 import { OrderStatusChanger } from './OrderStatusChanger';
+import { OrderInvoicePrint } from '@/components/Admin/OrderInvoicePrint';
 import Link from 'next/link';
 import Image from 'next/image';
 import { MOCK_PRODUCTS } from '@/lib/mockProducts';
@@ -59,6 +60,7 @@ export default async function AdminOrderDetailPage(props: {
         deliveryMethod: dbOrder.deliveryMethod,
         orderStatus: dbOrder.orderStatus,
         payment: dbOrder.payment,
+        tracking: dbOrder.tracking,
         createdAt: new Date(dbOrder.createdAt),
         updatedAt: new Date(dbOrder.updatedAt),
       };
@@ -108,6 +110,7 @@ export default async function AdminOrderDetailPage(props: {
           </div>
 
           <div className="flex items-center gap-3">
+            <OrderInvoicePrint order={order} />
             <span
               className={`px-3 py-1.5 text-xs font-bold uppercase rounded-sm ${order.orderStatus === 'DELIVERED'
                   ? 'bg-green-100 text-green-800'
@@ -135,6 +138,7 @@ export default async function AdminOrderDetailPage(props: {
           <OrderStatusChanger
             orderNumber={order.orderNumber}
             currentStatus={order.orderStatus}
+            initialTracking={order.tracking}
           />
         </div>
 
@@ -481,6 +485,43 @@ export default async function AdminOrderDetailPage(props: {
                 </div>
               </div>
             </div>
+
+            {/* Courier Dispatch & Tracking Card */}
+            {order.tracking?.trackingNumber && (
+              <div className="bg-white border border-gray-200 p-5 shadow-xs">
+                <div className="flex items-center justify-between mb-3 text-gray-900">
+                  <div className="flex items-center gap-2">
+                    <Truck className="w-4 h-4 text-brand-red" />
+                    <h3 className="font-heading text-base tracking-wider uppercase">Logistics & Tracking</h3>
+                  </div>
+                  <span className="text-[10px] font-bold uppercase px-2 py-0.5 bg-blue-50 text-blue-700 border border-blue-200 rounded">
+                    Dispatched
+                  </span>
+                </div>
+                <div className="space-y-2 text-xs">
+                  <div>
+                    <span className="text-gray-400 block text-[10px] uppercase">Logistics Carrier</span>
+                    <span className="font-bold text-gray-900">{order.tracking.carrier || 'Delhivery'}</span>
+                  </div>
+                  <div>
+                    <span className="text-gray-400 block text-[10px] uppercase">AWB / Consignment No</span>
+                    <span className="font-mono font-bold text-brand-red select-all">{order.tracking.trackingNumber}</span>
+                  </div>
+                  {order.tracking.trackingUrl && (
+                    <div className="pt-1">
+                      <a
+                        href={order.tracking.trackingUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="btn-dark w-full py-2 text-xs flex items-center justify-center gap-1.5"
+                      >
+                        Track Shipment Live <ExternalLink className="w-3.5 h-3.5" />
+                      </a>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
