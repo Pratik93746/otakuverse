@@ -50,8 +50,8 @@ export async function GET(request: NextRequest) {
         updatedAt: u.updatedAt?.toISOString(),
       })),
     });
-  } catch (err) {
-    return handleAuthError(err);
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'Failed to fetch users' }, { status: 500 });
   }
 }
 
