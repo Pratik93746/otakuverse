@@ -8,6 +8,8 @@ import { findUserByFirebaseUid, upsertUser } from '@/lib/db/users';
 import { getProductByIdOrSlug } from '@/lib/db/products';
 import { OrderItem } from '@/lib/db/types';
 import Razorpay from 'razorpay';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
 
 const razorpay =
   process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
@@ -17,9 +19,34 @@ const razorpay =
       })
     : null;
 
+async function resolveUser(request: NextRequest): Promise<{ uid: string; email?: string } | null> {
+  // 1. Try Firebase Bearer Token
+  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const fbUser = await requireFirebaseUser(request);
+      if (fbUser?.uid) return { uid: fbUser.uid, email: fbUser.email };
+    } catch {
+      // fallback
+    }
+  }
+
+  // 2. Try NextAuth session
+  try {
+    const session = await getServerSession(authOptions);
+    if (session?.user) {
+      const uid = (session.user as any).firebaseUid || (session.user as any).id || session.user.email || '';
+      return { uid, email: session.user.email || undefined };
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
+
 export async function POST(request: NextRequest) {
   try {
-    const verifiedUser = await requireFirebaseUser(request);
     const body = await request.json();
 
     const {
@@ -33,6 +60,9 @@ export async function POST(request: NextRequest) {
       couponCode,
       discount = 0,
     } = body;
+
+    const user = await resolveUser(request);
+    const orderUid = user?.uid || (customerEmail ? `cust_${customerEmail.replace(/[^a-zA-Z0-9]/g, '_')}` : `guest_${Date.now()}`);
 
     if (!items?.length) {
       return NextResponse.json({ error: 'No items in order' }, { status: 400 });
@@ -60,18 +90,21 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Valid city name is required' }, { status: 400 });
     }
 
-    // Ensure user profile in MongoDB
-    let dbUser = await findUserByFirebaseUid(verifiedUser.uid);
-    if (!dbUser) {
-      dbUser = await upsertUser(verifiedUser.uid, {
-        email: verifiedUser.email || customerEmail || `${verifiedUser.uid}@collector.baka.style`,
-        name: customerName || verifiedUser.name || 'Collector',
-      });
+    // Ensure user profile in MongoDB if authenticated
+    let dbUser: any = null;
+    if (user?.uid) {
+      dbUser = await findUserByFirebaseUid(user.uid);
+      if (!dbUser) {
+        dbUser = await upsertUser(user.uid, {
+          email: user.email || customerEmail || `${user.uid}@collector.baka.style`,
+          name: customerName || 'Collector',
+        });
+      }
     }
 
-    const email = customerEmail || dbUser.email || verifiedUser.email || 'collector@baka.style';
-    const name = customerName || address.name || dbUser.name || 'Valued Collector';
-    const phone = customerPhone || address.phone || dbUser.phone || '';
+    const email = customerEmail || dbUser?.email || user?.email || 'collector@baka.style';
+    const name = customerName || address.name || dbUser?.name || 'Valued Collector';
+    const phone = customerPhone || address.phone || dbUser?.phone || '';
 
     // Calculate subtotal server-side by looking up verified products in MongoDB
     let serverSubtotal = 0;
@@ -155,16 +188,18 @@ export async function POST(request: NextRequest) {
     };
 
     // Save address to user's saved addresses in MongoDB
-    try {
-      await saveAddress(verifiedUser.uid, shippingAddressSnapshot);
-    } catch (addrErr) {
-      console.debug('Address save notice:', addrErr);
+    if (user?.uid) {
+      try {
+        await saveAddress(user.uid, shippingAddressSnapshot);
+      } catch (addrErr) {
+        console.debug('Address save notice:', addrErr);
+      }
     }
 
     const now = new Date();
     const order = await createOrder({
       orderNumber,
-      firebaseUid: verifiedUser.uid,
+      firebaseUid: orderUid,
       customer: {
         name,
         email,
@@ -192,8 +227,14 @@ export async function POST(request: NextRequest) {
       },
     });
 
-    // Clear MongoDB cart for this verified user
-    await clearCart(verifiedUser.uid);
+    // Clear MongoDB cart for this user
+    if (user?.uid) {
+      try {
+        await clearCart(user.uid);
+      } catch (cartErr) {
+        console.debug('Clear cart notice:', cartErr);
+      }
+    }
 
     return NextResponse.json({
       orderNumber: order.orderNumber,
@@ -201,15 +242,19 @@ export async function POST(request: NextRequest) {
       razorpayOrderId,
       total: serverTotal,
     });
-  } catch (err) {
-    return handleAuthError(err);
+  } catch (err: any) {
+    console.error('Order creation error:', err);
+    return NextResponse.json({ error: err?.message || 'Failed to place order' }, { status: 500 });
   }
 }
 
 export async function GET(request: NextRequest) {
   try {
-    const verifiedUser = await requireFirebaseUser(request);
-    const orders = await getUserOrders(verifiedUser.uid);
+    const user = await resolveUser(request);
+    if (!user?.uid) {
+      return NextResponse.json({ orders: [] });
+    }
+    const orders = await getUserOrders(user.uid);
 
     return NextResponse.json({
       orders: orders.map((o) => ({
@@ -245,7 +290,7 @@ export async function GET(request: NextRequest) {
         },
       })),
     });
-  } catch (err) {
-    return handleAuthError(err);
+  } catch (err: any) {
+    return NextResponse.json({ error: err?.message || 'Failed to fetch orders' }, { status: 500 });
   }
 }
