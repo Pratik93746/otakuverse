@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Script from 'next/script';
 import { useCartStore } from '@/store/cart';
 import { useSession } from 'next-auth/react';
 import { fetchWithAuth } from '@/lib/api-client';
@@ -446,24 +447,32 @@ export default function CheckoutPage() {
         clearCart();
         setOrderId(data.orderNumber);
         setStep(4);
-      } else if (paymentMethod === 'razorpay' && data.razorpayOrderId) {
+        setLoading(false);
+      } else if (paymentMethod === 'razorpay') {
+        if (!data.razorpayOrderId) {
+          throw new Error('Payment gateway order ID was not received. Please try again.');
+        }
         await loadRazorpay(data);
       } else if (data.orderNumber) {
         clearCart();
         setOrderId(data.orderNumber);
         setStep(4);
+        setLoading(false);
       }
     } catch (err: any) {
       toast.error(err?.message || 'Failed to place order. Please try again.');
-    } finally {
       setLoading(false);
     }
   };
 
-  const loadRazorpay = async (orderData: { razorpayOrderId: string; orderNumber: string }) => {
+  const loadRazorpay = async (orderData: {
+    razorpayOrderId: string;
+    orderNumber: string;
+    razorpayKeyId?: string;
+  }) => {
     const launchModal = () => {
       const options = {
-        key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_TcDWGoTSYCyd2A',
+        key: orderData.razorpayKeyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_TcDWGoTSYCyd2A',
         amount: Math.round(total * 100),
         currency: 'INR',
         name: 'BAKA STYLE',
@@ -532,14 +541,28 @@ export default function CheckoutPage() {
 
     const existingScript = document.querySelector('script[src="https://checkout.razorpay.com/v1/checkout.js"]');
     if (existingScript) {
-      existingScript.addEventListener('load', launchModal);
+      // Script tag exists; poll for window.Razorpay in case it's finishing initialization
+      let attempts = 0;
+      const checkInterval = setInterval(() => {
+        attempts++;
+        if (typeof window !== 'undefined' && (window as any).Razorpay) {
+          clearInterval(checkInterval);
+          launchModal();
+        } else if (attempts > 25) {
+          clearInterval(checkInterval);
+          toast.error('Payment gateway timed out. Please refresh the page.');
+          setLoading(false);
+        }
+      }, 100);
       return;
     }
 
     const script = document.createElement('script');
     script.src = 'https://checkout.razorpay.com/v1/checkout.js';
     script.async = true;
-    script.onload = launchModal;
+    script.onload = () => {
+      launchModal();
+    };
     script.onerror = () => {
       toast.error('Failed to load Razorpay payment gateway. Please check your connection.');
       setLoading(false);
@@ -615,6 +638,7 @@ export default function CheckoutPage() {
 
   return (
     <div className="min-h-screen bg-gray-50/80 text-gray-900">
+      <Script src="https://checkout.razorpay.com/v1/checkout.js" strategy="lazyOnload" />
       {/* Checkout Navbar */}
       <header className="bg-white border-b border-gray-200 sticky top-0 z-30 shadow-xs">
         <div className="container-wide py-3.5 flex items-center justify-between">
@@ -1422,12 +1446,17 @@ export default function CheckoutPage() {
                       {loading ? (
                         <>
                           <Loader2 className="w-5 h-5 animate-spin" />
-                          <span>Processing Order...</span>
+                          <span>
+                            {paymentMethod === 'razorpay' ? 'Opening Payment Gateway...' : 'Processing Order...'}
+                          </span>
                         </>
                       ) : (
                         <>
                           <Lock className="w-4 h-4" />
-                          <span>PLACE ORDER — {formatPrice(total)}</span>
+                          <span>
+                            {paymentMethod === 'razorpay' ? 'PAY WITH RAZORPAY — ' : 'PLACE ORDER — '}
+                            {formatPrice(total)}
+                          </span>
                         </>
                       )}
                     </button>

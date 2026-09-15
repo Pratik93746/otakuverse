@@ -7,17 +7,9 @@ import { saveAddress } from '@/lib/db/addresses';
 import { findUserByFirebaseUid, upsertUser } from '@/lib/db/users';
 import { getProductByIdOrSlug } from '@/lib/db/products';
 import { OrderItem } from '@/lib/db/types';
-import Razorpay from 'razorpay';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-
-const razorpay =
-  process.env.RAZORPAY_KEY_ID && process.env.RAZORPAY_KEY_SECRET
-    ? new Razorpay({
-        key_id: process.env.RAZORPAY_KEY_ID,
-        key_secret: process.env.RAZORPAY_KEY_SECRET,
-      })
-    : null;
+import { getRazorpayClient } from '@/lib/razorpay';
 
 async function resolveUser(request: NextRequest): Promise<{ uid: string; email?: string } | null> {
   // 1. Try Firebase Bearer Token
@@ -163,16 +155,30 @@ export async function POST(request: NextRequest) {
 
     // Create Razorpay order if online payment
     let razorpayOrderId: string | null = null;
-    if (paymentMethod !== 'cod' && razorpay) {
+    const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || 'rzp_test_TcDWGoTSYCyd2A';
+
+    if (paymentMethod !== 'cod') {
+      const rzp = getRazorpayClient();
+      if (!rzp) {
+        return NextResponse.json(
+          { error: 'Razorpay payment gateway is not configured. Please contact support.' },
+          { status: 500 }
+        );
+      }
+
       try {
-        const rpOrder = await razorpay.orders.create({
+        const rpOrder = await rzp.orders.create({
           amount: Math.round(serverTotal * 100),
           currency: 'INR',
           receipt: orderNumber,
         });
         razorpayOrderId = rpOrder.id;
-      } catch (rpErr) {
-        console.warn('⚠️ Razorpay order creation skipped/failed:', rpErr);
+      } catch (rpErr: any) {
+        console.error('Razorpay order creation failed:', rpErr);
+        return NextResponse.json(
+          { error: rpErr?.error?.description || rpErr?.message || 'Failed to initialize payment gateway' },
+          { status: 500 }
+        );
       }
     }
 
@@ -240,6 +246,7 @@ export async function POST(request: NextRequest) {
       orderNumber: order.orderNumber,
       orderId: order._id?.toString() || order.orderNumber,
       razorpayOrderId,
+      razorpayKeyId,
       total: serverTotal,
     });
   } catch (err: any) {
