@@ -9,7 +9,7 @@ import { getProductByIdOrSlug } from '@/lib/db/products';
 import { OrderItem } from '@/lib/db/types';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
-import { getRazorpayClient } from '@/lib/razorpay';
+import { getRazorpayClient, getRazorpayCredentials } from '@/lib/razorpay';
 
 async function resolveUser(request: NextRequest): Promise<{ uid: string; email?: string } | null> {
   // 1. Try Firebase Bearer Token
@@ -155,7 +155,7 @@ export async function POST(request: NextRequest) {
 
     // Create Razorpay order if online payment
     let razorpayOrderId: string | null = null;
-    const razorpayKeyId = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || process.env.RAZORPAY_KEY_ID || 'rzp_test_TcDWGoTSYCyd2A';
+    const { key_id: razorpayKeyId } = getRazorpayCredentials();
 
     if (paymentMethod !== 'cod') {
       const rzp = getRazorpayClient();

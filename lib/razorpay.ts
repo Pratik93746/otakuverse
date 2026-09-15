@@ -1,11 +1,17 @@
 import Razorpay from 'razorpay';
 import crypto from 'crypto';
 
-export function getRazorpayClient(): Razorpay | null {
-  const key_id = process.env.RAZORPAY_KEY_ID;
-  const key_secret = process.env.RAZORPAY_KEY_SECRET;
+export function getRazorpayCredentials(): { key_id: string; key_secret: string } {
+  const key_id = (process.env.RAZORPAY_KEY_ID || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '').trim();
+  const key_secret = (process.env.RAZORPAY_KEY_SECRET || '').trim();
 
-  if (!key_id || !key_secret) {
+  return { key_id, key_secret };
+}
+
+export function getRazorpayClient(): Razorpay | null {
+  const { key_id, key_secret } = getRazorpayCredentials();
+
+  if (!key_id || !key_secret || key_id.includes('placeholder') || key_secret.includes('placeholder')) {
     return null;
   }
 
@@ -28,14 +34,14 @@ export function verifyPaymentSignature({
   paymentId: string;
   signature: string;
 }): boolean {
-  const secret = process.env.RAZORPAY_KEY_SECRET;
-  if (!secret || !orderId || !paymentId || !signature) {
+  const { key_secret } = getRazorpayCredentials();
+  if (!key_secret || !orderId || !paymentId || !signature) {
     return false;
   }
 
   try {
     const generatedSignature = crypto
-      .createHmac('sha256', secret)
+      .createHmac('sha256', key_secret)
       .update(`${orderId}|${paymentId}`)
       .digest('hex');
 
