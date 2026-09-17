@@ -40,7 +40,12 @@ export async function POST(request: NextRequest) {
     );
   } catch (error: any) {
     console.error('Razorpay create-order error:', error);
-    const statusCode = error?.statusCode || 500;
+    const isAuthError =
+      error?.statusCode === 401 ||
+      error?.status === 401 ||
+      error?.message?.toLowerCase().includes('auth') ||
+      error?.error?.code === 'BAD_REQUEST_ERROR' && error?.error?.description?.toLowerCase().includes('key');
+    const statusCode = isAuthError ? 401 : (error?.statusCode || 500);
     const message = error?.error?.description || error?.message || 'Failed to create Razorpay order';
     return NextResponse.json({ error: message }, { status: statusCode });
   }

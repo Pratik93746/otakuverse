@@ -72,8 +72,16 @@ export function RazorpayCheckoutButton({
 
       // 2. Ensure checkout.js is loaded
       const launchModal = () => {
+        const razorpayKey = process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID;
+        if (!razorpayKey) {
+          toast.error('Razorpay Key ID is not configured in NEXT_PUBLIC_RAZORPAY_KEY_ID.');
+          setLoading(false);
+          onError?.('Razorpay Key ID is not configured');
+          return;
+        }
+
         const options = {
-          key: process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_TcDWGoTSYCyd2A',
+          key: razorpayKey,
           amount: orderData.amount,
           currency: orderData.currency || currency,
           name,

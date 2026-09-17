@@ -45,10 +45,14 @@ export function verifyPaymentSignature({
       .update(`${orderId}|${paymentId}`)
       .digest('hex');
 
-    return crypto.timingSafeEqual(
-      Buffer.from(generatedSignature, 'utf-8'),
-      Buffer.from(signature, 'utf-8')
-    );
+    const genBuf = Buffer.from(generatedSignature, 'utf-8');
+    const sigBuf = Buffer.from(signature, 'utf-8');
+
+    if (genBuf.length !== sigBuf.length) {
+      return false;
+    }
+
+    return crypto.timingSafeEqual(genBuf, sigBuf);
   } catch (err) {
     console.error('Signature verification error:', err);
     return false;

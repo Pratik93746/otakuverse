@@ -472,7 +472,7 @@ export default function CheckoutPage() {
   }) => {
     const launchModal = () => {
       const options = {
-        key: orderData.razorpayKeyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || 'rzp_test_TcDWGoTSYCyd2A',
+        key: orderData.razorpayKeyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '',
         amount: Math.round(total * 100),
         currency: 'INR',
         name: 'BAKA STYLE',
