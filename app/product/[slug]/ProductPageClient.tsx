@@ -12,7 +12,17 @@ import { formatPrice, calculateDiscount, cn } from '@/lib/utils';
 import { useCartStore } from '@/store/cart';
 import { useWishlistStore } from '@/store/wishlist';
 import { ProductCard } from '@/components/ProductCard/ProductCard';
-import Model3DViewer from '@/components/Product/Model3DViewer';
+import dynamic from 'next/dynamic';
+
+const Model3DViewer = dynamic(() => import('@/components/Product/Model3DViewer'), {
+  ssr: false,
+  loading: () => (
+    <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/40 text-white gap-2">
+      <div className="w-8 h-8 border-2 border-red-500 border-t-transparent rounded-full animate-spin" />
+      <span className="text-xs uppercase tracking-widest font-mono text-zinc-400">Loading 3D Interactive Model...</span>
+    </div>
+  ),
+});
 import toast from 'react-hot-toast';
 import { useRouter } from 'next/navigation';
 import { useRequireAuth } from '@/lib/useRequireAuth';
@@ -470,11 +480,11 @@ export function ProductPageClient({ product, related }: ProductPageClientProps) 
             {activeTab === 'Shipping' && (
               <div className="space-y-4 text-sm text-gray-700">
                 <div className="p-4 bg-green-50 border border-green-100">
-                  <p className="font-semibold text-green-800 mb-1">🚚 Free shipping on orders above ₹999</p>
-                  <p className="text-green-700 text-xs">Standard shipping: 4–7 business days</p>
+                  <p className="font-semibold text-green-800 mb-1">🚚 FREE Delivery on All Orders</p>
+                  <p className="text-green-700 text-xs">Standard shipping: 4–7 business days · No minimum cart value</p>
                 </div>
-                <p><strong>Standard Delivery:</strong> 4–7 business days (₹79)</p>
-                <p><strong>Express Delivery:</strong> 2–3 business days (₹149)</p>
+                <p><strong>Standard Delivery:</strong> 4–7 business days (FREE)</p>
+                <p><strong>Express Delivery:</strong> 2–3 business days (FREE)</p>
                 <p><strong>Return Policy:</strong> 7-day return for damaged or defective products.</p>
                 <p><strong>Packaging:</strong> All figures are packed in collector-grade boxes with foam protection.</p>
               </div>

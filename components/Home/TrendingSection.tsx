@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Flame, TrendingUp, ShoppingBag, Eye, Zap } from 'lucide-react';
 import { Card3DTilt } from '@/components/UI/Card3DTilt';
@@ -153,9 +154,13 @@ export function TrendingSection() {
                 >
                   {/* 3D Image Container */}
                   <Link href={`/product/${activeItem.slug}`} className="relative w-full h-[380px] sm:h-[420px] bg-black overflow-hidden rounded-lg block">
-                    <img
+                    <Image
                       src={activeItem.image}
                       alt={activeItem.name}
+                      fill
+                      sizes="(max-width: 640px) 320px, 360px"
+                      loading="lazy"
+                      decoding="async"
                       className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
                     />
                     <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/20 to-transparent pointer-events-none" />
@@ -283,8 +288,16 @@ export function TrendingSection() {
                     }
                   >
                     {/* Thumbnail preview */}
-                    <div className="w-12 h-12 rounded-md bg-black overflow-hidden shrink-0 border border-white/15">
-                      <img src={item.image} alt={item.name} className="w-full h-full object-cover object-top" />
+                    <div className="w-12 h-12 rounded-md bg-black overflow-hidden shrink-0 border border-white/15 relative">
+                      <Image
+                        src={item.image}
+                        alt={item.name}
+                        fill
+                        sizes="48px"
+                        loading="lazy"
+                        decoding="async"
+                        className="object-cover object-top"
+                      />
                     </div>
                     <div className="truncate">
                       <span className="text-[9px] font-black uppercase tracking-widest block truncate" style={{ color: item.accentColor }}>

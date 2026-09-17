@@ -152,7 +152,8 @@ export default function CheckoutPage() {
   }, []);
 
   const subtotal = mounted ? getSubtotal() : 0;
-  const shippingCost = deliveryMethod === 'express' ? 149 : subtotal > 999 ? 0 : 79;
+  // Free delivery on all orders
+  const shippingCost = 0;
   const tax = Math.round(subtotal * 0.18);
   const total = subtotal + shippingCost + tax - discount;
 
@@ -1238,15 +1239,15 @@ export default function CheckoutPage() {
                         id: 'standard',
                         label: 'Standard Collector Delivery',
                         desc: 'Delivers in 4–7 business days with standard protective wrapping.',
-                        price: subtotal > 999 ? 0 : 79,
-                        badge: subtotal > 999 ? 'FREE' : undefined,
+                        price: 0,
+                        badge: 'FREE',
                       },
                       {
                         id: 'express',
                         label: 'Express Priority Air Dispatch',
                         desc: 'Delivers in 2–3 business days with double-reinforced bubble padding.',
-                        price: 149,
-                        badge: 'FASTEST',
+                        price: 0,
+                        badge: 'FREE',
                       },
                     ].map((option) => {
                       const isSelected = deliveryMethod === option.id;

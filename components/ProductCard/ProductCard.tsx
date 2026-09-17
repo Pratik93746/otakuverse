@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Heart, Eye, X, ShoppingBag, Zap, Check } from 'lucide-react';
 import { cn, formatPrice, calculateDiscount } from '@/lib/utils';
@@ -123,9 +124,14 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
           {/* Image Container */}
           <div className="relative overflow-hidden bg-[#1A1926] aspect-product rounded-t-[5px]">
             {product.image && !imgError ? (
-              <img
+              <Image
                 src={product.image}
                 alt={product.name}
+                fill
+                sizes="(max-width: 640px) 50vw, (max-width: 1024px) 33vw, 25vw"
+                priority={priority}
+                loading={priority ? 'eager' : 'lazy'}
+                decoding="async"
                 className="w-full h-full object-cover object-center transition-transform duration-500 group-hover:scale-105"
                 onError={() => setImgError(true)}
               />
@@ -253,7 +259,15 @@ export function ProductCard({ product, className, priority }: ProductCardProps) 
               {/* Modal Image */}
               <div className="w-full md:w-1/2 bg-[#1A1926] relative aspect-square md:aspect-auto min-h-[250px] p-4 flex items-center justify-center">
                 {product.image ? (
-                  <img src={product.image} alt={product.name} className="max-h-full max-w-full object-contain" />
+                  <Image
+                    src={product.image}
+                    alt={product.name}
+                    fill
+                    sizes="(max-width: 768px) 100vw, 50vw"
+                    loading="lazy"
+                    decoding="async"
+                    className="object-contain p-4"
+                  />
                 ) : (
                   <div className="w-full h-full flex items-center justify-center font-heading text-4xl text-gray-600">
                     OTV

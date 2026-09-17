@@ -20,8 +20,8 @@ const features = [
   },
   {
     icon: Truck,
-    title: 'FAST SHIPPING',
-    body: 'Express Pan-India delivery',
+    title: 'FREE DELIVERY',
+    body: 'Pan-India free insured delivery',
     gradient: 'from-cyan-400 to-blue-500',
     glow: 'rgba(34, 211, 238, 0.3)',
   },

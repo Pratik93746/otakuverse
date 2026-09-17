@@ -428,29 +428,35 @@ function OlderLoginContent() {
         firebaseUid = userCredential.user?.uid;
         firebaseDisplayName = userCredential.user?.displayName || cleanEmail.split('@')[0];
       } catch (fbErr: any) {
-        let msg = 'Authentication failed. Please check your credentials.';
-        if (
-          fbErr?.code === 'auth/user-not-found' ||
-          fbErr?.code === 'auth/invalid-credential' ||
-          fbErr?.message?.includes('user-not-found') ||
-          fbErr?.message?.includes('invalid-credential')
-        ) {
-          msg = 'This email is not registered or incorrect password.';
-        } else if (fbErr?.code === 'auth/wrong-password') {
-          msg = 'Incorrect password. Please try again.';
-        } else if (fbErr?.code === 'auth/invalid-email') {
-          msg = 'Invalid email address format.';
-        } else if (fbErr?.code === 'auth/too-many-requests') {
-          msg = 'Too many failed attempts. Try resetting your password.';
-        } else if (fbErr?.message) {
-          msg = fbErr.message;
-        }
+        // If client-side network failed (e.g. adblocker, Safari privacy, firewall, or Vercel domain restriction),
+        // don't abort immediately — fall through to server-side NextAuth which calls Firebase REST API directly.
+        if (fbErr?.code === 'auth/network-request-failed') {
+          console.warn('⚠️ Client Firebase network failed; falling back to server-side authentication...');
+        } else {
+          let msg = 'Authentication failed. Please check your credentials.';
+          if (
+            fbErr?.code === 'auth/user-not-found' ||
+            fbErr?.code === 'auth/invalid-credential' ||
+            fbErr?.message?.includes('user-not-found') ||
+            fbErr?.message?.includes('invalid-credential')
+          ) {
+            msg = 'This email is not registered or incorrect password.';
+          } else if (fbErr?.code === 'auth/wrong-password') {
+            msg = 'Incorrect password. Please try again.';
+          } else if (fbErr?.code === 'auth/invalid-email') {
+            msg = 'Invalid email address format.';
+          } else if (fbErr?.code === 'auth/too-many-requests') {
+            msg = 'Too many failed attempts. Try resetting your password.';
+          } else if (fbErr?.message) {
+            msg = fbErr.message;
+          }
 
-        setErrorMessage(msg);
-        toast.error(msg);
-        setChibiState('idle');
-        setLoading(false);
-        return;
+          setErrorMessage(msg);
+          toast.error(msg);
+          setChibiState('idle');
+          setLoading(false);
+          return;
+        }
       }
 
       const res = await signIn('credentials', {

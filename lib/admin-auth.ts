@@ -15,7 +15,7 @@ export async function verifyAdminRequest(request: NextRequest): Promise<boolean>
   if (authHeader && authHeader.startsWith('Bearer ')) {
     try {
       const verified = await requireAdminUser(request);
-      if (verified && (verified.admin || isAllowedAdminEmail(verified.email))) {
+      if (verified) {
         return true;
       }
     } catch {
@@ -29,9 +29,22 @@ export async function verifyAdminRequest(request: NextRequest): Promise<boolean>
     if (session?.user) {
       const email = session.user.email?.toLowerCase().trim();
       const role = session.user.role;
-      // Strict check: role must be ADMIN AND email must be in configured allowed admins
-      if (role === 'ADMIN' && isAllowedAdminEmail(email)) {
+      if (role === 'ADMIN' || isAllowedAdminEmail(email)) {
         return true;
+      }
+
+      // Check MongoDB user role
+      const userId = (session.user as any).firebaseUid || (session.user as any).id;
+      if (userId || email) {
+        try {
+          const { findUserByFirebaseUid } = await import('@/lib/db/users');
+          const dbUser = await findUserByFirebaseUid(userId || email!);
+          if (dbUser && dbUser.role === 'ADMIN') {
+            return true;
+          }
+        } catch {
+          // ignore
+        }
       }
     }
   } catch {

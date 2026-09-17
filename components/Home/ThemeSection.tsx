@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import Image from 'next/image';
 import { Card3DTilt } from '@/components/UI/Card3DTilt';
 import { Sparkles, ArrowRight } from 'lucide-react';
 
@@ -20,10 +21,14 @@ export function ThemeSection() {
     <section id="themes" className="section-spacing relative bg-[#0A0A0F] text-white overflow-hidden py-16" style={{ backgroundColor: '#0A0A0F' }}>
       {/* Background All-Star Anime Heroes Image with 3D Depth */}
       <div className="absolute inset-0 z-0 opacity-20 pointer-events-none">
-        <img
+        <Image
           src="/custom/anime_allstar_bg.jpg"
           alt="All Favorite Anime Characters Background"
-          className="w-full h-full object-cover object-center filter brightness-50"
+          fill
+          sizes="100vw"
+          loading="lazy"
+          decoding="async"
+          className="object-cover object-center filter brightness-50"
         />
         <div className="absolute inset-0 bg-gradient-to-b from-[#0A0A0F] via-transparent to-[#0A0A0F]" />
       </div>

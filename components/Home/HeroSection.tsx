@@ -2,7 +2,9 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useNetworkQuality } from '@/lib/useNetworkQuality';
 import { ArrowRight, Sparkles, Shield, Flame, Crown, ChevronLeft, ChevronRight, ShoppingBag, Zap } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import { useCartStore } from '@/store/cart';
@@ -84,14 +86,16 @@ export function HeroSection() {
   const [isPaused, setIsPaused] = useState(false);
   const addItem = useCartStore((s) => s.addItem);
   const { requireAuth } = useRequireAuth();
+  const { isLowBandwidth } = useNetworkQuality();
 
   useEffect(() => {
-    if (isPaused) return;
+    // Pause auto-sliding on slow connection or when user hovers
+    if (isPaused || isLowBandwidth) return;
     const timer = setInterval(() => {
       setCurrent((prev) => (prev + 1) % heroSlides.length);
-    }, 1500);
+    }, 6000);
     return () => clearInterval(timer);
-  }, [isPaused]);
+  }, [isPaused, isLowBandwidth]);
 
   const slide = heroSlides[current];
   const BadgeIcon = slide.badgeIcon;
@@ -326,9 +330,14 @@ export function HeroSection() {
               >
                 {/* 3D Image Container */}
                 <Link href={slide.primaryLink || '/shop'} className="relative w-full bg-black overflow-hidden rounded-lg aspect-[4/3.7] sm:aspect-square block group">
-                  <img
+                  <Image
                     src={slide.image}
                     alt={slide.titleLine1}
+                    fill
+                    sizes="(max-width: 640px) 320px, (max-width: 1024px) 370px, 400px"
+                    priority={current === 0}
+                    loading={current === 0 ? 'eager' : 'lazy'}
+                    decoding="async"
                     className="w-full h-full object-cover object-top transition-transform duration-700 group-hover:scale-105"
                   />
 

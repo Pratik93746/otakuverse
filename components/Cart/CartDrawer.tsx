@@ -181,8 +181,9 @@ export function CartDrawer() {
                   <span className="text-sm text-gray-500">Subtotal</span>
                   <span className="text-lg font-bold">{formatPrice(subtotal)}</span>
                 </div>
-                <p className="text-xs text-gray-400">
-                  Shipping and taxes calculated at checkout.
+                <p className="text-xs text-green-600 font-semibold flex items-center gap-1">
+                  <span>🚚</span>
+                  <span>FREE Delivery on all orders · Taxes included</span>
                 </p>
 
                 {/* Buttons */}

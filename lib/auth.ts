@@ -49,6 +49,61 @@ export const authOptions: NextAuthOptions = {
           } as NextAuthUser;
         }
 
+        // Server-side fallback: Authenticate with Firebase Auth REST API directly
+        // This bypasses client-side network failures, adblockers, and domain blocks
+        if (credentials.password) {
+          try {
+            const apiKey =
+              process.env.NEXT_PUBLIC_FIREBASE_API_KEY ||
+              'AIzaSyAxbMtQKuTqUOndhEfkykmYmidgBTSjjME';
+            const fbRes = await fetch(
+              `https://identitytoolkit.googleapis.com/v1/accounts:signInWithPassword?key=${apiKey}`,
+              {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  email: cleanEmail,
+                  password: credentials.password,
+                  returnSecureToken: true,
+                }),
+              }
+            );
+
+            const fbData = await fbRes.json();
+            if (fbRes.ok && fbData.localId) {
+              const firebaseUid = fbData.localId;
+              const userName = fbData.displayName || cleanEmail.split('@')[0];
+
+              let userRole: 'USER' | 'ADMIN' = isAdmin ? 'ADMIN' : 'USER';
+              try {
+                const { findUserByFirebaseUid, upsertUser } = await import('@/lib/db/users');
+                const dbUser = await findUserByFirebaseUid(firebaseUid);
+                if (dbUser && dbUser.role === 'ADMIN') {
+                  userRole = 'ADMIN';
+                } else if (!dbUser) {
+                  await upsertUser(firebaseUid, {
+                    email: cleanEmail,
+                    name: userName,
+                    role: userRole,
+                  });
+                }
+              } catch {
+                // non-blocking
+              }
+
+              return {
+                id: firebaseUid,
+                email: cleanEmail,
+                name: userName,
+                image: null,
+                role: userRole,
+              } as NextAuthUser;
+            }
+          } catch (err) {
+            console.error('Server-side Firebase auth fallback failed:', err);
+          }
+        }
+
         return null;
       },
     }),

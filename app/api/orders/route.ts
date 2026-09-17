@@ -145,8 +145,8 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Calculate delivery, tax, discount & total server-side
-    const shipping = deliveryMethod === 'express' ? 149 : serverSubtotal > 999 ? 0 : 79;
+    // Free delivery on all orders
+    const shipping = 0;
     const tax = Math.round(serverSubtotal * 0.18);
     const validDiscount = Math.min(Math.max(0, Number(discount) || 0), serverSubtotal);
     const serverTotal = serverSubtotal + shipping + tax - validDiscount;

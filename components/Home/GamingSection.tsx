@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { Gamepad2, Swords, Trophy, ShoppingBag, Zap, ArrowRight } from 'lucide-react';
 import { Card3DTilt } from '@/components/UI/Card3DTilt';
 import { formatPrice } from '@/lib/utils';
@@ -181,9 +182,13 @@ export function GamingSection() {
 
                 {/* 3D Image */}
                 <Link href={`/product/${gamingSpotlight.slug}`} className="relative w-full h-[350px] sm:h-[400px] bg-black overflow-hidden rounded-lg block">
-                  <img
+                  <Image
                     src={gamingSpotlight.image}
                     alt={gamingSpotlight.name}
+                    fill
+                    sizes="(max-width: 640px) 350px, 400px"
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover object-center transition-transform duration-700 group-hover:scale-105"
                   />
                   <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-black/15 to-transparent pointer-events-none" />
@@ -292,9 +297,13 @@ export function GamingSection() {
                 className="p-3 bg-[#0E0D14] border border-white/10 hover:border-amber-500/60 rounded-lg transition-all group flex flex-col justify-between"
               >
                 <div className="relative w-full h-[160px] sm:h-[220px] bg-black overflow-hidden rounded-md mb-2 sm:mb-3">
-                  <img
+                  <Image
                     src={item.image}
                     alt={item.name}
+                    fill
+                    sizes="(max-width: 640px) 50vw, 220px"
+                    loading="lazy"
+                    decoding="async"
                     className="w-full h-full object-cover object-top transition-transform duration-500 group-hover:scale-105"
                   />
                   <div className="absolute top-2 left-2 px-2 py-0.5 bg-black/80 border border-white/20 text-amber-400 text-[9px] sm:text-[10px] font-black uppercase tracking-wider rounded">

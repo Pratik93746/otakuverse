@@ -12,7 +12,8 @@ export default function CartPage() {
   const { items, removeItem, updateQuantity, getSubtotal } = useCartStore();
   const { requireAuth } = useRequireAuth();
   const subtotal = getSubtotal();
-  const shipping = subtotal > 999 ? 0 : 79;
+  // Free delivery on all orders
+  const shipping = 0;
   const tax = Math.round(subtotal * 0.18);
   const total = subtotal + shipping + tax;
 
@@ -125,11 +126,10 @@ export default function CartPage() {
                   <span className="text-gray-500">GST (18%)</span>
                   <span className="font-semibold">{formatPrice(tax)}</span>
                 </div>
-                {subtotal < 999 && (
-                  <p className="text-xs text-green-600 bg-green-50 p-2">
-                    Add {formatPrice(999 - subtotal)} more for FREE shipping!
-                  </p>
-                )}
+                <p className="text-xs text-green-600 bg-green-50 p-2.5 font-semibold flex items-center gap-1.5">
+                  <span>🎉</span>
+                  <span>FREE Delivery applied to this order!</span>
+                </p>
                 <div className="border-t border-gray-100 pt-3 flex justify-between text-base">
                   <span className="font-bold">Total</span>
                   <span className="font-bold text-brand-red">{formatPrice(total)}</span>
