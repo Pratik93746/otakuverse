@@ -145,9 +145,9 @@ export async function POST(request: NextRequest) {
       });
     }
 
-    // Free delivery on all orders
+    // Free delivery and taxes included in price on all orders
     const shipping = 0;
-    const tax = Math.round(serverSubtotal * 0.18);
+    const tax = 0;
     const validDiscount = Math.min(Math.max(0, Number(discount) || 0), serverSubtotal);
     const serverTotal = serverSubtotal + shipping + tax - validDiscount;
 

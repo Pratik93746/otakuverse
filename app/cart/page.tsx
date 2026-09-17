@@ -12,9 +12,9 @@ export default function CartPage() {
   const { items, removeItem, updateQuantity, getSubtotal } = useCartStore();
   const { requireAuth } = useRequireAuth();
   const subtotal = getSubtotal();
-  // Free delivery on all orders
+  // Free delivery and taxes included on all orders
   const shipping = 0;
-  const tax = Math.round(subtotal * 0.18);
+  const tax = 0;
   const total = subtotal + shipping + tax;
 
   if (items.length === 0) {
@@ -123,8 +123,8 @@ export default function CartPage() {
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-gray-500">GST (18%)</span>
-                  <span className="font-semibold">{formatPrice(tax)}</span>
+                  <span className="text-gray-500">GST / Taxes</span>
+                  <span className="font-semibold text-green-600">Included</span>
                 </div>
                 <p className="text-xs text-green-600 bg-green-50 p-2.5 font-semibold flex items-center gap-1.5">
                   <span>🎉</span>

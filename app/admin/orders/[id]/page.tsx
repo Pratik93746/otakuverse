@@ -337,8 +337,10 @@ export default async function AdminOrderDetailPage(props: {
                   </span>
                 </div>
                 <div className="flex justify-between text-gray-600">
-                  <span>GST (18%)</span>
-                  <span className="font-medium text-gray-900">{formatPrice(order.tax)}</span>
+                  <span>GST / Tax</span>
+                  <span className="font-medium text-gray-900">
+                    {order.tax === 0 ? <span className="text-green-600 font-semibold">Included</span> : formatPrice(order.tax)}
+                  </span>
                 </div>
                 {order.discount > 0 && (
                   <div className="flex justify-between text-green-600 font-medium">

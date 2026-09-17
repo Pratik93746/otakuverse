@@ -152,9 +152,9 @@ export default function CheckoutPage() {
   }, []);
 
   const subtotal = mounted ? getSubtotal() : 0;
-  // Free delivery on all orders
+  // Free delivery & taxes included on all orders
   const shippingCost = 0;
-  const tax = Math.round(subtotal * 0.18);
+  const tax = 0;
   const total = subtotal + shippingCost + tax - discount;
 
   useEffect(() => {
@@ -1530,8 +1530,8 @@ export default function CheckoutPage() {
                   </span>
                 </div>
                 <div className="flex justify-between text-gray-600">
-                  <span>GST (18%)</span>
-                  <span className="font-medium text-gray-900">{formatPrice(tax)}</span>
+                  <span>GST / Taxes</span>
+                  <span className="font-medium text-green-600">Included</span>
                 </div>
                 {discount > 0 && (
                   <div className="flex justify-between text-green-600 font-medium">
