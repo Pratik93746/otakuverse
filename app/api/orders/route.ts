@@ -5,7 +5,7 @@ import { createOrder, getUserOrders } from '@/lib/db/orders';
 import { clearCart } from '@/lib/db/carts';
 import { saveAddress } from '@/lib/db/addresses';
 import { findUserByFirebaseUid, upsertUser } from '@/lib/db/users';
-import { getProductByIdOrSlug } from '@/lib/db/products';
+import { getProductByIdOrSlug, decrementProductStock } from '@/lib/db/products';
 import { OrderItem } from '@/lib/db/types';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -239,6 +239,20 @@ export async function POST(request: NextRequest) {
         await clearCart(user.uid);
       } catch (cartErr) {
         console.debug('Clear cart notice:', cartErr);
+      }
+    }
+
+    // Automatically decrement stock on sale for confirmed COD orders
+    if (paymentMethod === 'cod') {
+      for (const item of verifiedItems) {
+        const prodId = item.productId || item.slug;
+        if (prodId) {
+          try {
+            await decrementProductStock(prodId, item.quantity);
+          } catch (stkErr) {
+            console.warn(`Could not decrement stock for ${prodId}:`, stkErr);
+          }
+        }
       }
     }
 

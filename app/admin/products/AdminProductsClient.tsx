@@ -258,6 +258,35 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
     }
   };
 
+  // Handle Setting Selling Price Directly (Admin Authority)
+  const handleSetPriceDirectly = async (prod: AdminProductItem, newPrice: number, newCompareAt?: number) => {
+    const price = Math.max(0, newPrice);
+    const compareAtPrice = newCompareAt !== undefined && newCompareAt > 0 ? newCompareAt : null;
+    const discount = compareAtPrice && compareAtPrice > price ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100) : 0;
+
+    setProducts((prev) =>
+      prev.map((p) => (p.id === prod.id ? { ...p, price, compareAtPrice, discount } : p))
+    );
+
+    try {
+      const res = await fetchWithAuth('/api/admin/products', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          id: prod.id || prod.slug,
+          price,
+          compareAtPrice,
+          discount,
+        }),
+      });
+      if (!res.ok) throw new Error();
+      toast.success(`Price updated to ₹${price.toLocaleString('en-IN')}`);
+    } catch {
+      toast.error('Failed to update product price');
+    }
+  };
+
+
   // Filtering
   const filteredProducts = useMemo(() => {
     return products.filter((p) => {
@@ -475,9 +504,35 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
                         </div>
                       </td>
 
-                      {/* Price & Discount */}
+                      {/* Price & Discount (Admin Editable) */}
                       <td className="py-3.5 px-4">
-                        <span className="font-bold text-gray-900">{formatPrice(product.price)}</span>
+                        <div className="flex items-center gap-1.5">
+                          <span className="font-bold text-gray-900">{formatPrice(product.price)}</span>
+                          <button
+                            onClick={() => {
+                              const input = prompt(
+                                `Enter new selling price (₹) for "${product.name}":`,
+                                String(product.price)
+                              );
+                              if (input !== null && input.trim() !== '' && !isNaN(Number(input))) {
+                                const newPrice = Math.max(0, parseFloat(input));
+                                const comparePrompt = prompt(
+                                  `Enter compare-at / MRP price (₹) (or leave blank if none):`,
+                                  product.compareAtPrice ? String(product.compareAtPrice) : ''
+                                );
+                                const newCompare =
+                                  comparePrompt !== null && comparePrompt.trim() !== '' && !isNaN(Number(comparePrompt))
+                                    ? Math.max(0, parseFloat(comparePrompt))
+                                    : undefined;
+                                handleSetPriceDirectly(product, newPrice, newCompare);
+                              }
+                            }}
+                            className="text-[10px] text-gray-400 hover:text-brand-red ml-1 underline cursor-pointer"
+                            title="Edit product selling price & MRP"
+                          >
+                            edit
+                          </button>
+                        </div>
                         {product.compareAtPrice && product.compareAtPrice > product.price && (
                           <div className="flex items-center gap-1.5 mt-0.5">
                             <span className="text-[10px] text-gray-400 line-through">

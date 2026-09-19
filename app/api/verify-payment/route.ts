@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyPaymentSignature } from '@/lib/razorpay';
-import { updateOrderPayment } from '@/lib/db/orders';
+import { updateOrderPayment, getOrderByNumber, getOrderByRazorpayOrderId } from '@/lib/db/orders';
+import { decrementProductStock } from '@/lib/db/products';
 
 export async function POST(request: NextRequest) {
   try {
@@ -36,18 +37,36 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If linked to an order in MongoDB, update the order payment status to PAID
-    if (orderNumber) {
-      try {
+    // If linked to an order in MongoDB, update the order payment status to PAID and reduce stock
+    try {
+      if (orderNumber) {
         await updateOrderPayment(orderNumber, {
           paymentStatus: 'PAID',
           paymentId: payment_id,
           razorpayOrderId: order_id,
           razorpaySignature: signature,
         });
-      } catch (dbErr) {
-        console.warn('Failed to update DB order during payment verification:', dbErr);
       }
+
+      // Decrement stock for each item in the paid order
+      const order = orderNumber 
+        ? await getOrderByNumber(orderNumber)
+        : await getOrderByRazorpayOrderId(order_id);
+
+      if (order && order.items && order.items.length > 0) {
+        for (const item of order.items) {
+          const prodId = item.productId || item.slug;
+          if (prodId) {
+            try {
+              await decrementProductStock(prodId, item.quantity);
+            } catch (stkErr) {
+              console.warn(`Could not decrement stock for item ${prodId}:`, stkErr);
+            }
+          }
+        }
+      }
+    } catch (dbErr) {
+      console.warn('Failed to update DB order or decrement stock during payment verification:', dbErr);
     }
 
     return NextResponse.json(

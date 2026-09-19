@@ -285,18 +285,34 @@ export async function updateProduct(
   const col = await getProductsCollection();
   const now = new Date();
 
-  const query: any = ObjectId.isValid(idOrSlug)
-    ? { $or: [{ _id: new ObjectId(idOrSlug) }, { slug: idOrSlug }] }
-    : { slug: idOrSlug };
+  const query: any = {
+    $or: [
+      { slug: idOrSlug },
+      { _id: idOrSlug },
+      ...(ObjectId.isValid(idOrSlug) ? [{ _id: new ObjectId(idOrSlug) }] : []),
+    ],
+  };
 
-  const dataToSet = {
+  const dataToSet: any = {
     ...updateData,
     updatedAt: now,
   };
-  delete (dataToSet as any)._id;
+  delete dataToSet._id;
+
+  if (updateData.price !== undefined) {
+    dataToSet.price = Number(updateData.price);
+  }
+  if (updateData.compareAtPrice !== undefined) {
+    dataToSet.compareAtPrice = updateData.compareAtPrice !== null ? Number(updateData.compareAtPrice) : null;
+  }
+  if (updateData.discount !== undefined) {
+    dataToSet.discount = Number(updateData.discount);
+  } else if (dataToSet.price !== undefined && dataToSet.compareAtPrice && dataToSet.compareAtPrice > dataToSet.price) {
+    dataToSet.discount = Math.round(((dataToSet.compareAtPrice - dataToSet.price) / dataToSet.compareAtPrice) * 100);
+  }
 
   if (updateData.stock !== undefined) {
-    dataToSet.stock = Number(updateData.stock);
+    dataToSet.stock = Math.max(0, Number(updateData.stock));
     dataToSet.isSoldOut = dataToSet.stock <= 0;
   }
 
@@ -308,9 +324,13 @@ export async function updateProductStock(idOrSlug: string, stock: number): Promi
   const col = await getProductsCollection();
   const now = new Date();
 
-  const query: any = ObjectId.isValid(idOrSlug)
-    ? { $or: [{ _id: new ObjectId(idOrSlug) }, { slug: idOrSlug }] }
-    : { slug: idOrSlug };
+  const query: any = {
+    $or: [
+      { slug: idOrSlug },
+      { _id: idOrSlug },
+      ...(ObjectId.isValid(idOrSlug) ? [{ _id: new ObjectId(idOrSlug) }] : []),
+    ],
+  };
 
   const numStock = Math.max(0, stock);
   const res = await col.updateOne(query, {
@@ -324,12 +344,57 @@ export async function updateProductStock(idOrSlug: string, stock: number): Promi
   return res.matchedCount > 0;
 }
 
+/**
+ * Atomically decrement stock when a product sells
+ */
+export async function decrementProductStock(idOrSlug: string, quantity: number): Promise<boolean> {
+  if (!idOrSlug || quantity <= 0) return false;
+  try {
+    const col = await getProductsCollection();
+    const query: any = {
+      $or: [
+        { slug: idOrSlug },
+        { _id: idOrSlug },
+        ...(ObjectId.isValid(idOrSlug) ? [{ _id: new ObjectId(idOrSlug) }] : []),
+      ],
+      stock: { $gte: quantity },
+    };
+
+    const res = await col.findOneAndUpdate(
+      query,
+      {
+        $inc: { stock: -quantity },
+        $set: { updatedAt: new Date() },
+      },
+      { returnDocument: 'after' }
+    );
+
+    if (res) {
+      if (res.stock <= 0) {
+        await col.updateOne(
+          { _id: res._id },
+          { $set: { stock: 0, isSoldOut: true } }
+        );
+      }
+      return true;
+    }
+    return false;
+  } catch (err) {
+    console.error(`Failed to decrement stock for product ${idOrSlug}:`, err);
+    return false;
+  }
+}
+
 export async function deleteProduct(idOrSlug: string): Promise<boolean> {
   const col = await getProductsCollection();
 
-  const query: any = ObjectId.isValid(idOrSlug)
-    ? { $or: [{ _id: new ObjectId(idOrSlug) }, { slug: idOrSlug }] }
-    : { slug: idOrSlug };
+  const query: any = {
+    $or: [
+      { slug: idOrSlug },
+      { _id: idOrSlug },
+      ...(ObjectId.isValid(idOrSlug) ? [{ _id: new ObjectId(idOrSlug) }] : []),
+    ],
+  };
 
   const res = await col.deleteOne(query);
   return res.deletedCount > 0;
