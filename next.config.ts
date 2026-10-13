@@ -19,14 +19,6 @@ const nextConfig: NextConfig = {
       { protocol: 'https', hostname: 'cdn.jsdelivr.net' },
     ],
   },
-  async rewrites() {
-    return [
-      {
-        source: '/catalog/:path*',
-        destination: 'https://cdn.jsdelivr.net/gh/Pratik93746/otakuverse@main/public/catalog/:path*',
-      },
-    ];
-  },
   async headers() {
     return [
       {

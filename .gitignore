@@ -69,7 +69,5 @@ next-env.d.ts
 # wrangler files
 .wrangler
 
-# Static media offloaded to CDN (prevents Vercel deployment bloat)
-/public/catalog/
-/public/archive/
+# Static media
 /public/raw_assets/
