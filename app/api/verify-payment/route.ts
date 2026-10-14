@@ -1,97 +1,69 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyPaymentSignature } from '@/lib/razorpay';
-import { updateOrderPayment, getOrderByNumber, getOrderByRazorpayOrderId, claimAndMarkOrderPaid } from '@/lib/db/orders';
-import { decrementProductStock } from '@/lib/db/products';
+import { confirmRazorpayPayment } from '@/lib/payments/confirm';
+
+const str = (v: unknown, max = 128): string | null =>
+  typeof v === 'string' && v.length > 0 && v.length <= max ? v : null;
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
 
     // Support both standard Razorpay naming and camelCase/underscore naming
-    const order_id = body.order_id || body.razorpay_order_id;
-    const payment_id = body.payment_id || body.razorpay_payment_id;
-    const signature = body.razorpay_signature || body.signature;
-    const orderNumber = body.orderNumber;
+    const order_id = str(body.order_id ?? body.razorpay_order_id);
+    const payment_id = str(body.payment_id ?? body.razorpay_payment_id);
+    const signature = str(body.razorpay_signature ?? body.signature);
+    const orderNumber = body.orderNumber === undefined ? undefined : str(body.orderNumber, 64);
 
-    // Validate presence of required verification fields
-    if (!order_id || !payment_id || !signature) {
+    if (!order_id || !payment_id || !signature || orderNumber === null) {
       return NextResponse.json(
-        {
-          error: 'Missing required fields: order_id, payment_id, and razorpay_signature are required',
-        },
+        { error: 'Missing required fields: order_id, payment_id, and razorpay_signature are required' },
         { status: 400 }
       );
     }
 
-    // Verify HMAC-SHA256 signature
-    const isValid = verifyPaymentSignature({
-      orderId: order_id,
-      paymentId: payment_id,
-      signature: signature,
-    });
-
-    if (!isValid) {
+    // HMAC-SHA256(order_id|payment_id) proves Razorpay authorised this payment for this
+    // gateway order. The gateway order's amount was fixed server-side at checkout.
+    if (!verifyPaymentSignature({ orderId: order_id, paymentId: payment_id, signature })) {
       return NextResponse.json(
         { success: false, error: 'Signature verification failed: Invalid signature' },
         { status: 400 }
       );
     }
 
-    // Retrieve order strictly by the authenticated gateway order ID (SEC-CRIT-03)
-    const order = await getOrderByRazorpayOrderId(order_id);
+    const result = await confirmRazorpayPayment({
+      razorpayOrderId: order_id,
+      paymentId: payment_id,
+      signature,
+      expectedOrderNumber: orderNumber,
+      source: 'verify',
+    });
 
-    if (!order) {
+    if (result.ok) {
+      return NextResponse.json(
+        { success: true, message: 'Payment signature verified successfully', payment_id, order_id, orderNumber: result.order.orderNumber },
+        { status: 200 }
+      );
+    }
+
+    if (result.code === 'ORDER_NOT_FOUND') {
       return NextResponse.json(
         { success: false, error: 'No order found matching the verified payment gateway transaction.' },
         { status: 404 }
       );
     }
-
-    // If orderNumber is provided, strictly enforce correspondence (prevents order substitution)
-    if (orderNumber && order.orderNumber !== orderNumber) {
-      console.error(`🚨 [Security Exception] Order substitution attempt: payload=${orderNumber}, bound=${order.orderNumber}`);
+    if (result.code === 'ORDER_MISMATCH') {
       return NextResponse.json(
         { success: false, error: 'Security violation: Order correspondence mismatch.' },
         { status: 400 }
       );
     }
-
-    // Atomic Compare-And-Swap (CAS) to eliminate double-decrement race conditions (SEC-HIGH-02)
-    const claimed = await claimAndMarkOrderPaid(order.orderNumber, {
-      paymentId: payment_id,
-      razorpayOrderId: order_id,
-      razorpaySignature: signature,
-    });
-
-    if (claimed) {
-      if (order.items && order.items.length > 0) {
-        for (const item of order.items) {
-          const prodId = item.productId || item.slug;
-          if (prodId) {
-            try {
-              await decrementProductStock(prodId, item.quantity);
-            } catch (stkErr) {
-              console.warn(`Could not decrement stock for item ${prodId}:`, stkErr);
-            }
-          }
-        }
-      }
-    }
-
     return NextResponse.json(
-      {
-        success: true,
-        message: 'Payment signature verified successfully',
-        payment_id,
-        order_id,
-      },
-      { status: 200 }
+      { success: false, error: 'This order can no longer be paid. If you were charged, our team will refund you — please contact support.' },
+      { status: 409 }
     );
-  } catch (error: any) {
+  } catch (error) {
     console.error('Payment verification error:', error);
-    return NextResponse.json(
-      { error: error?.message || 'Server error during payment verification' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Server error during payment verification' }, { status: 500 });
   }
 }

@@ -135,8 +135,31 @@ export interface DbOrder {
   orderStatus: OrderStatus;
   payment: OrderPayment;
   tracking?: OrderTracking;
+  /** Problems the owner must resolve by hand (e.g. paid but out of stock). */
+  reviewFlags?: OrderReviewFlag[];
+  /** Append-only log of status changes and who made them. */
+  statusHistory?: OrderStatusEvent[];
+  /** Set once stock for a cancelled order has been returned, so it is never returned twice. */
+  stockRestoredAt?: Date | null;
+  paidAt?: Date | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export type OrderReviewFlag =
+  | 'OUT_OF_STOCK_AFTER_PAYMENT'
+  | 'AMOUNT_MISMATCH'
+  | 'PAID_AFTER_CANCELLATION'
+  | 'DUPLICATE_PAYMENT'
+  | 'REFUND_REQUIRED';
+
+export interface OrderStatusEvent {
+  at: Date;
+  from: OrderStatus | null;
+  to: OrderStatus;
+  /** 'system:webhook', 'system:verify', 'system:checkout' or the admin's email. */
+  by: string;
+  note?: string;
 }
 
 export interface DbAddress {

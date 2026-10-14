@@ -1,5 +1,5 @@
 import { getCollection, ensureIndexes } from '@/lib/mongodb';
-import { DbOrder, OrderStatus, PaymentStatus, OrderTracking } from './types';
+import { DbOrder, OrderStatus, PaymentStatus, OrderTracking, OrderReviewFlag } from './types';
 
 export async function getOrdersCollection() {
   await ensureIndexes();
@@ -117,37 +117,71 @@ export async function updateOrderPayment(
 }
 
 /**
- * Atomic Compare-And-Swap (CAS) to claim and mark an order as PAID.
- * Strictly guarantees single-execution semantics and eliminates race conditions.
- * Returns true ONLY for the first thread that successfully flipped the order from PENDING to PAID.
+ * Atomically move a Razorpay order from awaiting-payment to PAID.
+ *
+ * The filter is the whole safety check: the order must be bound to this exact
+ * gateway order id, be an online-payment order, still be PENDING (not cancelled,
+ * not shipped) and not already paid. Exactly one caller can win; everyone else
+ * gets null. Returns the order as it was before the update.
  */
 export async function claimAndMarkOrderPaid(
-  orderNumber: string,
-  paymentData: {
-    paymentId: string;
-    razorpayOrderId: string;
-    razorpaySignature?: string;
-  }
-): Promise<boolean> {
+  razorpayOrderId: string,
+  paymentData: { paymentId: string; razorpaySignature?: string | null; by: string }
+): Promise<DbOrder | null> {
+  if (!razorpayOrderId || !paymentData.paymentId) return null;
   const col = await getOrdersCollection();
   const now = new Date();
 
-  const res = await col.updateOne(
+  return await col.findOneAndUpdate(
     {
-      orderNumber,
-      'payment.paymentStatus': { $ne: 'PAID' },
+      'payment.razorpayOrderId': razorpayOrderId,
+      'payment.paymentMethod': 'RAZORPAY',
+      'payment.paymentStatus': { $in: ['PENDING', 'FAILED'] },
+      orderStatus: 'PENDING',
     },
     {
       $set: {
         'payment.paymentStatus': 'PAID',
         'payment.paymentId': paymentData.paymentId,
-        'payment.razorpayOrderId': paymentData.razorpayOrderId,
         'payment.razorpaySignature': paymentData.razorpaySignature || null,
         orderStatus: 'CONFIRMED',
+        paidAt: now,
         updatedAt: now,
       },
-    }
+      $push: {
+        statusHistory: { at: now, from: 'PENDING', to: 'CONFIRMED', by: paymentData.by, note: `payment ${paymentData.paymentId}` },
+      } as any,
+    },
+    { returnDocument: 'before' }
   );
+}
 
+/**
+ * Record a failed attempt on an order that is still awaiting payment.
+ * Never touches paid, cancelled or COD orders and never rewrites the gateway binding,
+ * so a failed attempt cannot block the customer's later successful retry.
+ */
+export async function markRazorpayPaymentFailed(razorpayOrderId: string, paymentId?: string): Promise<boolean> {
+  if (!razorpayOrderId) return false;
+  const col = await getOrdersCollection();
+  const res = await col.updateOne(
+    {
+      'payment.razorpayOrderId': razorpayOrderId,
+      'payment.paymentMethod': 'RAZORPAY',
+      'payment.paymentStatus': 'PENDING',
+      orderStatus: 'PENDING',
+    },
+    { $set: { 'payment.paymentStatus': 'FAILED', 'payment.lastFailedPaymentId': paymentId || null, updatedAt: new Date() } }
+  );
   return res.modifiedCount === 1;
+}
+
+/** Attach a problem flag the owner must look at. Idempotent per flag. */
+export async function flagOrderForReview(orderNumber: string, flag: OrderReviewFlag, detail?: string): Promise<void> {
+  const col = await getOrdersCollection();
+  await col.updateOne(
+    { orderNumber },
+    { $addToSet: { reviewFlags: flag } as any, $set: { updatedAt: new Date() } }
+  );
+  console.error(JSON.stringify({ event: 'order.review_flag', orderNumber, flag, detail: detail || null }));
 }

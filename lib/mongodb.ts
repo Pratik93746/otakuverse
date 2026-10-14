@@ -11,7 +11,8 @@ const isPlaceholder =
 export const isPlaceholderUri = isPlaceholder;
 
 const options = {
-  maxPoolSize: 10,
+  // Tests set 1: the local Mongo-wire test server is only per-document atomic on one connection.
+  maxPoolSize: Number(process.env.MONGODB_MAX_POOL_SIZE) || 10,
   serverSelectionTimeoutMS: 5000,
 };
 
@@ -63,7 +64,8 @@ if (!isPlaceholder && typeof window === 'undefined') {
   }
 }
 
-export const DB_NAME = 'otakuverse';
+// MONGODB_DB_NAME lets tests and staging use an isolated database.
+export const DB_NAME = (process.env.MONGODB_DB_NAME || 'otakuverse').trim();
 
 /**
  * Get MongoClient connected instance promise
