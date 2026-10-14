@@ -11,7 +11,8 @@ const env = {
   FIREBASE_ADMIN_PROJECT_ID: process.env.FIREBASE_ADMIN_PROJECT_ID || process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID || 'otakuverse-5fa52',
   FIREBASE_ADMIN_CLIENT_EMAIL: process.env.FIREBASE_ADMIN_CLIENT_EMAIL || '',
   FIREBASE_ADMIN_PRIVATE_KEY: process.env.FIREBASE_ADMIN_PRIVATE_KEY ? process.env.FIREBASE_ADMIN_PRIVATE_KEY.replace(/\\n/g, '\n') : '',
-  ADMIN_EMAILS: (process.env.ADMIN_EMAILS || 'gojo@otakuverse.com,admin@otakuverse.in,admin@baka.style,gojo@baka.style')
+  // No default: admin rights must be granted explicitly per deployment.
+  ADMIN_EMAILS: (process.env.ADMIN_EMAILS || '')
     .toLowerCase()
     .split(',')
     .map((e) => e.trim())
