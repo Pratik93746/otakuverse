@@ -32,8 +32,6 @@ export const firebaseConfig = {
 export const isFirebaseConfigured = true;
 
 let app: FirebaseApp;
-let auth: Auth;
-let googleProvider: GoogleAuthProvider;
 let analytics: Analytics | null = null;
 
 if (!getApps().length) {
@@ -42,8 +40,8 @@ if (!getApps().length) {
   app = getApp();
 }
 
-auth = getAuth(app);
-googleProvider = new GoogleAuthProvider();
+const auth: Auth = getAuth(app);
+const googleProvider: GoogleAuthProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 // Initialize Firebase Analytics on client-side only

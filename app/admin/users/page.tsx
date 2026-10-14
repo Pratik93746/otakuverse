@@ -21,7 +21,7 @@ export default async function AdminUsersPage() {
   }
 
   // Also extract customer profiles from orders if any
-  let orderCustomers: any[] = [];
+  const orderCustomers: any[] = [];
   try {
     const orders = await getAllOrders();
     orders.forEach((o) => {

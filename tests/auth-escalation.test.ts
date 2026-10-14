@@ -5,7 +5,7 @@ import { isAllowedAdminEmail } from '@/lib/firebase-admin';
 import { resetDb, dropDbAndClose, col } from './helpers/db';
 
 // The credentials provider's real authorize() lives under .options in next-auth v4.
-const authorize = (authOptions.providers[1] as any).options.authorize as (c: any) => Promise<any>;
+const authorize = (authOptions.providers[0] as any).options.authorize as (c: any) => Promise<any>;
 const ADMIN = 'owner@shop.test';
 const realFetch = globalThis.fetch;
 
@@ -59,6 +59,10 @@ test('identity email comes from Firebase, not from the typed email', async () =>
   const user = await authorize({ email: ADMIN, password: 'pw' });
   assert.equal(user.email, 'real@shop.test');
   assert.equal(user.role, 'USER');
+});
+
+test('only the Firebase-verified credentials provider exists (no unverified OAuth path into sessions)', () => {
+  assert.deepEqual(authOptions.providers.map((p: any) => p.id), ['credentials']);
 });
 
 test('wrong password is denied', async () => {
