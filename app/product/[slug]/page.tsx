@@ -18,20 +18,20 @@ async function getProduct(slug: string) {
       id: p._id?.toString() || p.slug,
       description:
         p.description ??
-        `Official authentic ${p.name} anime collectible sculpted with premium grade PVC details.`,
-      sku: `OTV-${p.slug.slice(0, 6).toUpperCase()}-101`,
-      height: 28,
-      width: 14,
-      depth: 12,
-      weight: 750,
-      material: 'PVC + ABS',
-      manufacturer: p.brandName ?? 'BAKA Exclusive',
+        `Official authentic ${p.name} ultra-HD premium fine art poster print on 300 GSM archival paper.`,
+      sku: `BAKA-${p.slug.slice(0, 6).toUpperCase()}-PST`,
+      height: 42,
+      width: 29.7,
+      depth: 1.5,
+      weight: 250,
+      material: '300 GSM Archival Fine Art Paper',
+      manufacturer: p.brandName ?? 'BAKA Studio Prints',
       edition: p.isLimitedEdition
-        ? 'Limited Masterpiece Edition'
-        : 'First Edition Authentic Release',
+        ? 'Limited Collector Art Edition'
+        : 'Official Studio Release Print',
       releaseDate: p.createdAt || new Date(),
-      viewerType: 'HYBRID',
-      modelUrl: '/models/anime_figure.glb',
+      viewerType: 'POSTER',
+      modelUrl: '',
       isSoldOut: p.stock <= 0,
       isNewArrival: p.isNewArrival ?? false,
       isBestSeller: p.isBestSeller ?? false,

@@ -4,6 +4,17 @@ const Product = require('../models/Product');
 const Cart = require('../models/Cart');
 const { getPagination, formatPagination } = require('../utils/pagination');
 
+const Coupon = require('../models/Coupon');
+
+const ACTIVE_COUPONS = {
+  OTAKU10: { type: 'PERCENTAGE', value: 10, maxDiscount: 1000, minOrder: 1500 },
+  BANKAI20: { type: 'PERCENTAGE', value: 20, maxDiscount: 2000, minOrder: 3000 },
+  GOJO500: { type: 'FIXED', value: 500, minOrder: 4000 },
+  WELCOME: { type: 'PERCENTAGE', value: 15, maxDiscount: 1500, minOrder: 2000 },
+  POSTER15: { type: 'PERCENTAGE', value: 15, maxDiscount: 1000, minOrder: 999 },
+  FIRSTWALL: { type: 'FIXED', value: 200, minOrder: 1200 },
+};
+
 class OrderService {
   /**
    * Helper to generate unique human-readable order number
@@ -15,9 +26,10 @@ class OrderService {
   }
 
   /**
-   * Zero-trust server-side order calculation & creation
+   * Zero-trust server-side order calculation & creation.
+   * Client-supplied prices and discounts are never trusted.
    */
-  async createOrder(userId, customer, items, shippingAddress, discount = 0, currency = 'INR') {
+  async createOrder(userId, customer, items, shippingAddress, couponCode = null, currency = 'INR', paymentMethod = 'RAZORPAY') {
     if (!items || items.length === 0) {
       throw new Error('Order items array cannot be empty.');
     }
@@ -67,18 +79,65 @@ class OrderService {
       });
     }
 
-    const validDiscount = Math.min(Math.max(0, Number(discount) || 0), subtotal);
+    // Zero-Trust Server-Side Coupon & Discount Calculation
+    let validDiscount = 0;
+    if (couponCode) {
+      const cleanCode = String(couponCode).toUpperCase().trim();
+      let couponDef = null;
+
+      // 1. Try DB lookup
+      try {
+        const dbCoupon = await Coupon.findOne({ code: cleanCode, isActive: true });
+        if (dbCoupon) {
+          if (dbCoupon.expiresAt && new Date(dbCoupon.expiresAt) < new Date()) {
+            throw new Error(`Coupon "${cleanCode}" has expired.`);
+          }
+          if (dbCoupon.usageLimit && dbCoupon.usedCount >= dbCoupon.usageLimit) {
+            throw new Error(`Coupon "${cleanCode}" usage limit has been reached.`);
+          }
+          couponDef = {
+            type: dbCoupon.discountType,
+            value: dbCoupon.discountValue,
+            minOrder: dbCoupon.minOrderAmount,
+            maxDiscount: dbCoupon.maxDiscountAmount,
+          };
+        }
+      } catch (dbErr) {
+        if (dbErr.message.includes('expired') || dbErr.message.includes('limit')) {
+          throw dbErr;
+        }
+      }
+
+      // 2. Fallback to active verified coupons
+      if (!couponDef && ACTIVE_COUPONS[cleanCode]) {
+        couponDef = ACTIVE_COUPONS[cleanCode];
+      }
+
+      if (!couponDef) {
+        throw new Error(`Invalid or unrecognized coupon code: "${cleanCode}".`);
+      }
+
+      if (couponDef.minOrder && subtotal < couponDef.minOrder) {
+        throw new Error(`Coupon "${cleanCode}" requires a minimum order subtotal of ₹${couponDef.minOrder}.`);
+      }
+
+      if (couponDef.type === 'PERCENTAGE') {
+        const pctDiscount = Math.round((subtotal * couponDef.value) / 100);
+        validDiscount = couponDef.maxDiscount ? Math.min(pctDiscount, couponDef.maxDiscount) : pctDiscount;
+      } else {
+        validDiscount = couponDef.value;
+      }
+
+      validDiscount = Math.min(validDiscount, subtotal);
+    }
+
     const shippingFee = 0; // Free delivery policy
     const tax = 0; // Tax included
-    const totalAmount = subtotal + shippingFee + tax - validDiscount;
-
-    if (totalAmount <= 0) {
-      throw new Error('Calculated order total must be greater than zero.');
-    }
+    const totalAmount = Math.max(1, subtotal + shippingFee + tax - validDiscount);
 
     const orderNumber = this.generateOrderNumber();
 
-    const isCod = orderData.paymentMethod === 'COD' || orderData.paymentMethod === 'cod';
+    const isCod = paymentMethod === 'COD' || paymentMethod === 'cod';
 
     const newOrder = new Order({
       orderNumber,

@@ -54,14 +54,16 @@ export default async function AdminDashboardPage() {
   const productCount = products.length;
   const userCount = users.length;
   const orderCount = orders.length;
-  const totalRevenue = orders.reduce((sum, o) => sum + (o.total || 0), 0);
+  // Calculate verified revenue only from successfully paid orders
+  const paidOrders = orders.filter((o) => o.payment?.paymentStatus === 'PAID');
+  const totalRevenue = paidOrders.reduce((sum, o) => sum + (o.total || 0), 0);
   const activeCartCount = carts.length;
 
   // Recent orders
   const recentOrders = orders.slice(0, 6).map((o) => ({
     id: o._id?.toString() || o.orderNumber,
     orderNumber: o.orderNumber,
-    customerName: o.customer?.name || o.shippingAddress?.fullName || 'Valued Collector',
+    customerName: o.customer?.name || o.shippingAddress?.fullName || 'Valued Customer',
     customerEmail: o.customer?.email || '',
     total: o.total,
     status: o.orderStatus || 'CONFIRMED',
@@ -74,55 +76,55 @@ export default async function AdminDashboardPage() {
     .filter((p) => (Number(p.stock) || 0) <= 5)
     .slice(0, 6);
 
-  // Category distribution
+  // Category distribution for Posters & Wall Art
   const categoryStats = [
     {
-      name: 'Figures',
-      slug: 'figures',
-      emoji: '🥷',
-      tagline: 'Action Figures & Statues',
+      name: 'Anime Posters',
+      slug: 'anime-posters',
+      emoji: '🖼️',
+      tagline: 'Ultra-HD Fine Art Prints',
       count: products.filter((p: any) => {
-        const c = (p.category || p.categoryName || '').toLowerCase();
-        return c.includes('figure') || c.includes('statue');
+        const c = (p.category || p.categoryName || p.categorySlug || '').toLowerCase();
+        return c.includes('poster') || c.includes('print') || !c || c === 'anime-posters';
       }).length,
     },
     {
-      name: 'Katanas',
-      slug: 'katanas',
-      emoji: '🗡️',
-      tagline: 'Nichirin Blades & Swords',
-      count: products.filter((p: any) => (p.category || p.categoryName || '').toLowerCase().includes('katana')).length,
+      name: 'Framed Canvas',
+      slug: 'framed-canvas',
+      emoji: '🎨',
+      tagline: 'Gallery-Wrapped Canvas Wall Art',
+      count: products.filter((p: any) => (p.category || p.categoryName || p.categorySlug || '').toLowerCase().includes('canvas')).length,
     },
     {
-      name: 'Keychains',
-      slug: 'keychains',
-      emoji: '🗝️',
-      tagline: 'Spinners, Charms & Emblems',
-      count: products.filter((p: any) => (p.category || p.categoryName || '').toLowerCase().includes('keychain')).length,
+      name: 'Minimalist Prints',
+      slug: 'minimalist-prints',
+      emoji: '✨',
+      tagline: 'Modern Minimalist Wall Art',
+      count: products.filter((p: any) => (p.category || p.categoryName || p.categorySlug || '').toLowerCase().includes('minimal')).length,
     },
     {
-      name: 'Clothing',
-      slug: 'clothing',
-      emoji: '🥋',
-      tagline: 'Streetwear, Hoodies & Tees',
-      count: products.filter((p: any) => (p.category || p.categoryName || '').toLowerCase().includes('cloth')).length,
+      name: 'Manga Panels',
+      slug: 'manga-panels',
+      emoji: '📖',
+      tagline: 'Monochrome High-GSM Manga Art',
+      count: products.filter((p: any) => (p.category || p.categoryName || p.categorySlug || '').toLowerCase().includes('manga')).length,
     },
     {
-      name: 'Collectables',
-      slug: 'collectables',
-      emoji: '💎',
-      tagline: 'Plushies, Devil Fruits & Replicas',
+      name: 'Vintage Wall Art',
+      slug: 'vintage-wall-art',
+      emoji: '📜',
+      tagline: 'Retro Japanese Aesthetic Posters',
       count: products.filter((p: any) => {
-        const c = (p.category || p.categoryName || '').toLowerCase();
-        return c.includes('collect') || c.includes('plush');
+        const c = (p.category || p.categoryName || p.categorySlug || '').toLowerCase();
+        return c.includes('vintage') || c.includes('retro');
       }).length,
     },
     {
-      name: 'Limited Editions',
-      slug: 'limited-editions',
+      name: 'Duo & Multi Sets',
+      slug: 'poster-sets',
       emoji: '⭐',
-      tagline: 'Vault Collector Pieces',
-      count: products.filter((p: any) => (p.category || p.categoryName || '').toLowerCase().includes('limited') || p.isLimitedEdition).length,
+      tagline: 'Curated Multi-Piece Wall Sets',
+      count: products.filter((p: any) => (p.category || p.categoryName || p.categorySlug || '').toLowerCase().includes('set') || p.isLimitedEdition).length,
     },
   ];
 

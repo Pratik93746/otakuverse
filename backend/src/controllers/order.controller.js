@@ -3,7 +3,7 @@ const { successResponse, errorResponse } = require('../utils/response');
 
 const createOrder = async (req, res, next) => {
   try {
-    const { items, shippingAddress, customer, discount = 0, currency = 'INR' } = req.body;
+    const { items, shippingAddress, customer, couponCode, currency = 'INR', paymentMethod = 'RAZORPAY' } = req.body;
     const userId = req.user ? req.user.uid : `guest_${Date.now()}`;
 
     const order = await orderService.createOrder(
@@ -11,8 +11,9 @@ const createOrder = async (req, res, next) => {
       customer,
       items,
       shippingAddress,
-      discount,
-      currency
+      couponCode,
+      currency,
+      paymentMethod
     );
 
     return successResponse(res, order, 201);

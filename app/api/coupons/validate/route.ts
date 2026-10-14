@@ -1,20 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-
-const ACTIVE_COUPONS: Record<
-  string,
-  {
-    code: string;
-    type: 'PERCENTAGE' | 'FIXED';
-    value: number;
-    maxDiscount?: number;
-    minOrder?: number;
-  }
-> = {
-  OTAKU10: { code: 'OTAKU10', type: 'PERCENTAGE', value: 10, maxDiscount: 1000, minOrder: 1500 },
-  BANKAI20: { code: 'BANKAI20', type: 'PERCENTAGE', value: 20, maxDiscount: 2000, minOrder: 3000 },
-  GOJO500: { code: 'GOJO500', type: 'FIXED', value: 500, minOrder: 4000 },
-  WELCOME: { code: 'WELCOME', type: 'PERCENTAGE', value: 15, maxDiscount: 1500, minOrder: 2000 },
-};
+import { calculateCouponDiscount } from '@/lib/coupons';
 
 export async function POST(request: NextRequest) {
   try {
@@ -24,29 +9,19 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Coupon code required' }, { status: 400 });
     }
 
-    const cleanCode = code.toUpperCase().trim();
-    const coupon = ACTIVE_COUPONS[cleanCode];
+    const result = calculateCouponDiscount(code, Number(orderTotal) || 0);
 
-    if (!coupon) {
-      return NextResponse.json({ error: 'Invalid or expired coupon code' }, { status: 400 });
-    }
-
-    if (coupon.minOrder && orderTotal < coupon.minOrder) {
+    if (!result.valid) {
       return NextResponse.json(
-        { error: `Minimum order amount ₹${coupon.minOrder} required for this coupon` },
+        { error: result.reason || 'Invalid or expired coupon code' },
         { status: 400 }
       );
     }
 
-    let discount = 0;
-    if (coupon.type === 'PERCENTAGE') {
-      discount = Math.round((orderTotal * coupon.value) / 100);
-      if (coupon.maxDiscount) discount = Math.min(discount, coupon.maxDiscount);
-    } else {
-      discount = coupon.value;
-    }
-
-    return NextResponse.json({ discount, couponId: coupon.code });
+    return NextResponse.json({
+      discount: result.discount,
+      couponId: String(code).toUpperCase().trim(),
+    });
   } catch (error) {
     return NextResponse.json({ error: 'Failed to validate coupon' }, { status: 500 });
   }

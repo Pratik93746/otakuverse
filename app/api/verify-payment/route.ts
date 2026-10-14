@@ -1,12 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyPaymentSignature } from '@/lib/razorpay';
-import { updateOrderPayment, getOrderByNumber, getOrderByRazorpayOrderId } from '@/lib/db/orders';
+import { updateOrderPayment, getOrderByNumber, getOrderByRazorpayOrderId, claimAndMarkOrderPaid } from '@/lib/db/orders';
 import { decrementProductStock } from '@/lib/db/products';
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    
+
     // Support both standard Razorpay naming and camelCase/underscore naming
     const order_id = body.order_id || body.razorpay_order_id;
     const payment_id = body.payment_id || body.razorpay_payment_id;
@@ -37,23 +37,34 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // If linked to an order in MongoDB, update the order payment status to PAID and reduce stock
-    try {
-      if (orderNumber) {
-        await updateOrderPayment(orderNumber, {
-          paymentStatus: 'PAID',
-          paymentId: payment_id,
-          razorpayOrderId: order_id,
-          razorpaySignature: signature,
-        });
-      }
+    // Retrieve order strictly by the authenticated gateway order ID (SEC-CRIT-03)
+    const order = await getOrderByRazorpayOrderId(order_id);
 
-      // Decrement stock for each item in the paid order
-      const order = orderNumber 
-        ? await getOrderByNumber(orderNumber)
-        : await getOrderByRazorpayOrderId(order_id);
+    if (!order) {
+      return NextResponse.json(
+        { success: false, error: 'No order found matching the verified payment gateway transaction.' },
+        { status: 404 }
+      );
+    }
 
-      if (order && order.items && order.items.length > 0) {
+    // If orderNumber is provided, strictly enforce correspondence (prevents order substitution)
+    if (orderNumber && order.orderNumber !== orderNumber) {
+      console.error(`🚨 [Security Exception] Order substitution attempt: payload=${orderNumber}, bound=${order.orderNumber}`);
+      return NextResponse.json(
+        { success: false, error: 'Security violation: Order correspondence mismatch.' },
+        { status: 400 }
+      );
+    }
+
+    // Atomic Compare-And-Swap (CAS) to eliminate double-decrement race conditions (SEC-HIGH-02)
+    const claimed = await claimAndMarkOrderPaid(order.orderNumber, {
+      paymentId: payment_id,
+      razorpayOrderId: order_id,
+      razorpaySignature: signature,
+    });
+
+    if (claimed) {
+      if (order.items && order.items.length > 0) {
         for (const item of order.items) {
           const prodId = item.productId || item.slug;
           if (prodId) {
@@ -65,8 +76,6 @@ export async function POST(request: NextRequest) {
           }
         }
       }
-    } catch (dbErr) {
-      console.warn('Failed to update DB order or decrement stock during payment verification:', dbErr);
     }
 
     return NextResponse.json(

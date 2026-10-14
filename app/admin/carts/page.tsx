@@ -1,6 +1,7 @@
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
 import { getAllCarts } from '@/lib/db/carts';
+import { getAllUsers } from '@/lib/db/users';
 import { AdminNav } from '@/components/Admin/AdminNav';
 import { AdminAuthGate } from '@/components/Admin/AdminAuthGate';
 import { ShoppingCart, Info, Clock, ExternalLink } from 'lucide-react';
@@ -16,19 +17,34 @@ export default async function AdminCartsPage() {
     return <AdminAuthGate currentSession={session} callbackUrl="/admin/carts" pageTitle="Active Customer Carts" />;
   }
 
-  // Fetch all active carts from MongoDB
+  // Fetch all active carts and users from MongoDB
   let carts: any[] = [];
   try {
-    const dbCarts = await getAllCarts();
-    carts = dbCarts.map((c) => ({
-      userId: c.firebaseUid,
-      userEmail: `${c.firebaseUid}@collector.baka.style`,
-      userName: 'Collector',
-      items: c.items,
-      subtotal: c.subtotal,
-      totalItems: c.totalItems,
-      updatedAt: c.updatedAt?.toISOString(),
-    }));
+    const [dbCarts, allUsers] = await Promise.all([
+      getAllCarts(),
+      getAllUsers(),
+    ]);
+
+    const userMap = new Map();
+    for (const u of allUsers || []) {
+      if (u.firebaseUid) {
+        userMap.set(u.firebaseUid, u);
+      }
+    }
+
+    carts = (dbCarts || []).map((c) => {
+      const u = userMap.get(c.firebaseUid);
+      return {
+        userId: c.firebaseUid,
+        userEmail: u?.email || (c.firebaseUid.includes('@') ? c.firebaseUid : 'Customer'),
+        userName: u?.name || 'Customer',
+        userPhone: u?.phone || '',
+        items: c.items,
+        subtotal: c.subtotal,
+        totalItems: c.totalItems,
+        updatedAt: c.updatedAt?.toISOString(),
+      };
+    });
   } catch (err) {
     console.error('MongoDB carts fetch error:', err);
   }

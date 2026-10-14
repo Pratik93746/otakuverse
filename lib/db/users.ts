@@ -35,20 +35,17 @@ export async function upsertUser(
   const now = new Date();
   const cleanEmail = data.email.toLowerCase().trim();
 
-  // Determine role: if approved admin email, force ADMIN role
-  const isAdmin = isAllowedAdminEmail(cleanEmail) || data.role === 'ADMIN';
-  const role: UserRole = isAdmin ? 'ADMIN' : (data.role || 'USER');
-
+  // Role assignment: preserve existing ADMIN role if already set, or allow explicit admin assignment
   const existing = await col.findOne({ firebaseUid });
+  const role: UserRole = existing?.role === 'ADMIN' ? 'ADMIN' : (data.role === 'ADMIN' ? 'ADMIN' : 'USER');
 
   if (existing) {
-    const updatedRole = existing.role === 'ADMIN' || isAdmin ? 'ADMIN' : (data.role || existing.role);
     const updateDoc: Partial<DbUser> = {
       name: data.name || existing.name,
       email: cleanEmail,
       phone: data.phone !== undefined ? data.phone : existing.phone,
       image: data.image !== undefined ? data.image : existing.image,
-      role: updatedRole,
+      role: existing.role === 'ADMIN' ? 'ADMIN' : (data.role || existing.role),
       updatedAt: now,
     };
 

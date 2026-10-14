@@ -115,3 +115,39 @@ export async function updateOrderPayment(
   );
   return res.matchedCount > 0;
 }
+
+/**
+ * Atomic Compare-And-Swap (CAS) to claim and mark an order as PAID.
+ * Strictly guarantees single-execution semantics and eliminates race conditions.
+ * Returns true ONLY for the first thread that successfully flipped the order from PENDING to PAID.
+ */
+export async function claimAndMarkOrderPaid(
+  orderNumber: string,
+  paymentData: {
+    paymentId: string;
+    razorpayOrderId: string;
+    razorpaySignature?: string;
+  }
+): Promise<boolean> {
+  const col = await getOrdersCollection();
+  const now = new Date();
+
+  const res = await col.updateOne(
+    {
+      orderNumber,
+      'payment.paymentStatus': { $ne: 'PAID' },
+    },
+    {
+      $set: {
+        'payment.paymentStatus': 'PAID',
+        'payment.paymentId': paymentData.paymentId,
+        'payment.razorpayOrderId': paymentData.razorpayOrderId,
+        'payment.razorpaySignature': paymentData.razorpaySignature || null,
+        orderStatus: 'CONFIRMED',
+        updatedAt: now,
+      },
+    }
+  );
+
+  return res.modifiedCount === 1;
+}

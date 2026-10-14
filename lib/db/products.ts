@@ -2,6 +2,7 @@ import { getCollection, ensureIndexes } from '@/lib/mongodb';
 import { DbProduct } from './types';
 import { ObjectId } from 'mongodb';
 import { MOCK_PRODUCTS } from '@/lib/mockProducts';
+import { normalizeImageUrl } from '@/lib/utils';
 
 export async function getProductsCollection() {
   await ensureIndexes();
@@ -39,9 +40,11 @@ export async function getProducts(options: ProductQueryOptions = {}) {
     if (options.filter === 'preorder') mongoFilter.isPreOrder = true;
     if (options.filter === 'sale') mongoFilter.compareAtPrice = { $gt: 0 };
 
+    const escapeRegex = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
     // Category filter
     if (options.category) {
-      const catClean = options.category.toLowerCase().replace(/s$/, '').replace(/-/g, ' ');
+      const catClean = escapeRegex(options.category.toLowerCase().replace(/s$/, '').replace(/-/g, ' '));
       mongoFilter.$or = [
         { categorySlug: { $regex: catClean, $options: 'i' } },
         { categoryName: { $regex: catClean, $options: 'i' } },
@@ -50,7 +53,7 @@ export async function getProducts(options: ProductQueryOptions = {}) {
 
     // Anime Franchise filter
     if (options.anime) {
-      const animeClean = options.anime.toLowerCase().replace(/-/g, ' ');
+      const animeClean = escapeRegex(options.anime.toLowerCase().replace(/-/g, ' '));
       mongoFilter.$and = mongoFilter.$and || [];
       mongoFilter.$and.push({
         $or: [
@@ -62,17 +65,17 @@ export async function getProducts(options: ProductQueryOptions = {}) {
 
     // Brand filter
     if (options.brand) {
-      mongoFilter.brandName = { $regex: options.brand, $options: 'i' };
+      mongoFilter.brandName = { $regex: escapeRegex(options.brand), $options: 'i' };
     }
 
     // Character filter
     if (options.character) {
-      mongoFilter.characterName = { $regex: options.character, $options: 'i' };
+      mongoFilter.characterName = { $regex: escapeRegex(options.character), $options: 'i' };
     }
 
     // Search filter
     if (options.search) {
-      const q = options.search.trim();
+      const q = escapeRegex(options.search.trim());
       mongoFilter.$or = [
         { name: { $regex: q, $options: 'i' } },
         { characterName: { $regex: q, $options: 'i' } },
@@ -265,8 +268,17 @@ export async function createProduct(productData: Omit<DbProduct, '_id' | 'create
     }
   }
 
+  const rawImage = productData.image || '/catalog/dragon-ball/item-001.png';
+  const normalizedImage = normalizeImageUrl(rawImage);
+  const normalizedImages = (productData.images && productData.images.length > 0
+    ? productData.images
+    : [rawImage]
+  ).map((img) => normalizeImageUrl(img));
+
   const newProduct: DbProduct = {
     ...productData,
+    image: normalizedImage,
+    images: normalizedImages,
     slug,
     stock: Number(productData.stock) || 0,
     isSoldOut: (Number(productData.stock) || 0) <= 0,
@@ -298,6 +310,13 @@ export async function updateProduct(
     updatedAt: now,
   };
   delete dataToSet._id;
+
+  if (updateData.image) {
+    dataToSet.image = normalizeImageUrl(updateData.image);
+  }
+  if (Array.isArray(updateData.images)) {
+    dataToSet.images = updateData.images.map((img) => normalizeImageUrl(img));
+  }
 
   if (updateData.price !== undefined) {
     dataToSet.price = Number(updateData.price);

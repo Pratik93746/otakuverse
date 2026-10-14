@@ -1,4 +1,5 @@
 import { create } from 'zustand';
+import { persist, createJSONStorage } from 'zustand/middleware';
 
 export interface CartItem {
   id: string;
@@ -57,115 +58,124 @@ async function syncMongoCartDirectly(items: CartItem[]) {
   }, 300);
 }
 
-export const useCartStore = create<CartStore>()((set, get) => ({
-  items: [],
-  isOpen: false,
-  activeUserId: null,
-  activeUserEmail: null,
-  activeUserName: null,
+export const useCartStore = create<CartStore>()(
+  persist(
+    (set, get) => ({
+      items: [],
+      isOpen: false,
+      activeUserId: null,
+      activeUserEmail: null,
+      activeUserName: null,
 
-  setUser: (userId, email, name) => {
-    const currentUserId = get().activeUserId;
-    if (currentUserId !== userId) {
-      set({
-        activeUserId: userId,
-        activeUserEmail: email || null,
-        activeUserName: name || null,
-        items: [],
-      });
-      return;
-    }
+      setUser: (userId, email, name) => {
+        const currentUserId = get().activeUserId;
+        if (currentUserId !== userId) {
+          set({
+            activeUserId: userId,
+            activeUserEmail: email || null,
+            activeUserName: name || null,
+            items: [],
+          });
+          return;
+        }
 
-    set({
-      activeUserId: userId,
-      activeUserEmail: email || null,
-      activeUserName: name || null,
-    });
-  },
+        set({
+          activeUserId: userId,
+          activeUserEmail: email || null,
+          activeUserName: name || null,
+        });
+      },
 
-  setItems: (items) => {
-    set({ items });
-  },
+      setItems: (items) => {
+        set({ items });
+      },
 
-  addItem: (newItem) => {
-    set((state) => {
-      let nextItems: CartItem[];
-      const existing = state.items.find((i) => i.productId === newItem.productId);
-      if (existing) {
-        nextItems = state.items.map((i) =>
-          i.productId === newItem.productId
-            ? { ...i, quantity: Math.min(i.quantity + 1, i.stock) }
-            : i
-        );
-      } else {
-        nextItems = [...state.items, { ...newItem, quantity: 1 }];
-      }
-
-      if (state.activeUserId) {
-        syncMongoCartDirectly(nextItems);
-      }
-
-      return {
-        items: nextItems,
-        isOpen: true,
-      };
-    });
-  },
-
-  removeItem: (productId) =>
-    set((state) => {
-      const nextItems = state.items.filter((i) => i.productId !== productId);
-      if (state.activeUserId) {
-        syncMongoCartDirectly(nextItems);
-      }
-      return { items: nextItems };
-    }),
-
-  updateQuantity: (productId, quantity) =>
-    set((state) => {
-      const nextItems =
-        quantity <= 0
-          ? state.items.filter((i) => i.productId !== productId)
-          : state.items.map((i) =>
-              i.productId === productId
-                ? { ...i, quantity: Math.min(quantity, i.stock) }
+      addItem: (newItem) => {
+        set((state) => {
+          let nextItems: CartItem[];
+          const existing = state.items.find((i) => i.productId === newItem.productId);
+          if (existing) {
+            nextItems = state.items.map((i) =>
+              i.productId === newItem.productId
+                ? { ...i, quantity: Math.min(i.quantity + 1, i.stock) }
                 : i
             );
-      if (state.activeUserId) {
-        syncMongoCartDirectly(nextItems);
-      }
-      return { items: nextItems };
-    }),
+          } else {
+            nextItems = [...state.items, { ...newItem, quantity: 1 }];
+          }
 
-  clearCart: (isSignOut = false) => {
-    const { activeUserId } = get();
-    set({ items: [] });
+          if (state.activeUserId) {
+            syncMongoCartDirectly(nextItems);
+          }
 
-    if (typeof window !== 'undefined') {
-      if (isSignOut) {
-        set({
-          activeUserId: null,
-          activeUserEmail: null,
-          activeUserName: null,
-          items: [],
+          return {
+            items: nextItems,
+            isOpen: true,
+          };
         });
-      } else if (activeUserId) {
-        import('@/lib/api-client')
-          .then(({ fetchWithAuth }) => {
-            fetchWithAuth('/api/cart', { method: 'DELETE' }).catch(() => {});
-          })
-          .catch(() => {});
-      }
+      },
 
-      window.dispatchEvent(new CustomEvent('baka-cart-updated', { detail: [] }));
+      removeItem: (productId) =>
+        set((state) => {
+          const nextItems = state.items.filter((i) => i.productId !== productId);
+          if (state.activeUserId) {
+            syncMongoCartDirectly(nextItems);
+          }
+          return { items: nextItems };
+        }),
+
+      updateQuantity: (productId, quantity) =>
+        set((state) => {
+          const nextItems =
+            quantity <= 0
+              ? state.items.filter((i) => i.productId !== productId)
+              : state.items.map((i) =>
+                  i.productId === productId
+                    ? { ...i, quantity: Math.min(quantity, i.stock) }
+                    : i
+                );
+          if (state.activeUserId) {
+            syncMongoCartDirectly(nextItems);
+          }
+          return { items: nextItems };
+        }),
+
+      clearCart: (isSignOut = false) => {
+        const { activeUserId } = get();
+        set({ items: [] });
+
+        if (typeof window !== 'undefined') {
+          if (isSignOut) {
+            set({
+              activeUserId: null,
+              activeUserEmail: null,
+              activeUserName: null,
+              items: [],
+            });
+          } else if (activeUserId) {
+            import('@/lib/api-client')
+              .then(({ fetchWithAuth }) => {
+                fetchWithAuth('/api/cart', { method: 'DELETE' }).catch(() => {});
+              })
+              .catch(() => {});
+          }
+
+          window.dispatchEvent(new CustomEvent('baka-cart-updated', { detail: [] }));
+        }
+      },
+
+      openCart: () => set({ isOpen: true }),
+      closeCart: () => set({ isOpen: false }),
+      toggleCart: () => set((state) => ({ isOpen: !state.isOpen })),
+
+      getTotalItems: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
+      getSubtotal: () =>
+        get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
+    }),
+    {
+      name: 'baka_customer_cart',
+      storage: createJSONStorage(() => (typeof window !== 'undefined' ? localStorage : ({} as any))),
+      partialize: (state) => ({ items: state.items }),
     }
-  },
-
-  openCart: () => set({ isOpen: true }),
-  closeCart: () => set({ isOpen: false }),
-  toggleCart: () => set((state) => ({ isOpen: !state.isOpen })),
-
-  getTotalItems: () => get().items.reduce((sum, i) => sum + i.quantity, 0),
-  getSubtotal: () =>
-    get().items.reduce((sum, i) => sum + i.price * i.quantity, 0),
-}));
+  )
+);

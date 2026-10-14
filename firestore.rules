@@ -13,10 +13,16 @@ service cloud.firestore {
 
     function isAdmin() {
       return isAuthenticated() && (
-        request.auth.token.email == 'gojo@otakuverse.com' ||
-        request.auth.token.email == 'admin@otakuverse.in' ||
+        request.auth.token.admin == true ||
         request.auth.token.role == 'ADMIN' ||
-        request.auth.token.admin == true
+        (
+          request.auth.token.email_verified == true && (
+            request.auth.token.email == 'gojo@otakuverse.com' ||
+            request.auth.token.email == 'admin@otakuverse.in' ||
+            request.auth.token.email == 'admin@baka.style' ||
+            request.auth.token.email == 'gojo@baka.style'
+          )
+        )
       );
     }
 
@@ -69,7 +75,7 @@ service cloud.firestore {
     // ============================================================
     match /products/{productId} {
       allow read: if true;
-      allow write: if isAdmin;
+      allow write: if isAdmin();
     }
 
     // ============================================================

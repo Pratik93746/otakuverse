@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from 'next/server';
 import { getRazorpayClient } from '@/lib/razorpay';
 
 export async function POST(request: NextRequest) {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: 'Endpoint disabled in production' }, { status: 404 });
+  }
+
   try {
     const rzp = getRazorpayClient();
     if (!rzp) {

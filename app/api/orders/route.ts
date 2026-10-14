@@ -105,51 +105,55 @@ export async function POST(request: NextRequest) {
     for (const item of items) {
       const dbProduct = await getProductByIdOrSlug(item.productId || item.slug || item.name);
 
-      let unitPrice = Number(item.price) || 0;
-      let productName = item.name || 'Anime Collectible';
-      let productImage = item.image || '';
-      let productSlug = item.slug || '';
-      let characterName = '';
-      let animeName = '';
-      let brandName = '';
-      let sku = item.productId || '';
-
-      if (dbProduct) {
-        // ALWAYS enforce server/database price
-        unitPrice = dbProduct.price;
-        productName = dbProduct.name;
-        productImage = dbProduct.image || productImage;
-        productSlug = dbProduct.slug;
-        characterName = dbProduct.characterName || '';
-        animeName = dbProduct.animeName || '';
-        brandName = dbProduct.brandName || '';
-        sku = dbProduct.slug || dbProduct._id?.toString() || sku;
+      if (!dbProduct) {
+        return NextResponse.json(
+          { error: `Item "${item.name || item.productId || 'Unknown'}" is not available in our store catalog.` },
+          { status: 400 }
+        );
       }
 
       const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);
+
+      if (dbProduct.stock < quantity) {
+        return NextResponse.json(
+          { error: `Insufficient stock for "${dbProduct.name}". Only ${dbProduct.stock} left in stock.` },
+          { status: 400 }
+        );
+      }
+
+      const unitPrice = dbProduct.price;
       const itemSubtotal = unitPrice * quantity;
       serverSubtotal += itemSubtotal;
 
       verifiedItems.push({
-        productId: item.productId || productSlug,
-        name: productName,
-        slug: productSlug,
-        image: productImage,
-        characterName: characterName || undefined,
-        animeName: animeName || undefined,
-        brandName: brandName || undefined,
-        sku: sku || undefined,
+        productId: dbProduct._id?.toString() || dbProduct.slug || item.productId,
+        name: dbProduct.name,
+        slug: dbProduct.slug,
+        image: dbProduct.image || (dbProduct.images && dbProduct.images[0]) || item.image || '',
+        characterName: dbProduct.characterName || undefined,
+        animeName: dbProduct.animeName || undefined,
+        brandName: dbProduct.brandName || undefined,
+        sku: dbProduct.slug || dbProduct._id?.toString() || item.productId,
         purchasePrice: unitPrice,
         quantity,
         subtotal: itemSubtotal,
       });
     }
 
+    // Server-side discount calculation strictly from valid coupon
+    let validDiscount = 0;
+    if (couponCode) {
+      const { calculateCouponDiscount } = await import('@/lib/coupons');
+      const couponResult = calculateCouponDiscount(couponCode, serverSubtotal);
+      if (couponResult.valid) {
+        validDiscount = couponResult.discount;
+      }
+    }
+
     // Free delivery and taxes included in price on all orders
     const shipping = 0;
     const tax = 0;
-    const validDiscount = Math.min(Math.max(0, Number(discount) || 0), serverSubtotal);
-    const serverTotal = serverSubtotal + shipping + tax - validDiscount;
+    const serverTotal = Math.max(1, serverSubtotal + shipping + tax - validDiscount);
 
     const orderNumber = generateOrderNumber();
 
@@ -171,6 +175,10 @@ export async function POST(request: NextRequest) {
           amount: Math.round(serverTotal * 100),
           currency: 'INR',
           receipt: orderNumber,
+          notes: {
+            orderNumber,
+            userId: orderUid,
+          },
         });
         razorpayOrderId = rpOrder.id;
       } catch (rpErr: any) {

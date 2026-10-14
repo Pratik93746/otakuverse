@@ -117,13 +117,13 @@ function LoginForm() {
 
     setLoading(true);
     try {
-      let firebaseUid: string | undefined = undefined;
+      let idToken: string | undefined = undefined;
       let firebaseDisplayName: string | undefined = undefined;
 
       // Authenticate directly with Firebase
       try {
         const userCredential = await signInWithFirebaseEmail(cleanEmail, password);
-        firebaseUid = userCredential.user?.uid;
+        idToken = await userCredential.user?.getIdToken();
         firebaseDisplayName = userCredential.user?.displayName || cleanEmail.split('@')[0];
       } catch (fbErr: any) {
         // If client-side network failed (e.g. adblocker, Safari privacy, firewall, or Vercel domain restriction),
@@ -156,13 +156,13 @@ function LoginForm() {
         }
       }
 
-      // Establish verified session with NextAuth (uses server fallback if firebaseUid is missing)
+      // Establish verified session with NextAuth (uses server fallback if idToken is missing)
       const res = await signIn('credentials', {
         email: cleanEmail,
         password,
         name: firebaseDisplayName,
         authType: 'firebase',
-        firebaseUid,
+        idToken,
         redirect: false,
         callbackUrl,
       });
@@ -212,11 +212,13 @@ function LoginForm() {
       const result = await signInWithFirebaseGoogle();
       const fbUser = result.user;
       if (fbUser?.email) {
+        const idToken = await fbUser.getIdToken();
         const res = await signIn('credentials', {
           email: fbUser.email,
           name: fbUser.displayName || fbUser.email.split('@')[0],
           authType: 'firebase',
           firebaseUid: fbUser.uid,
+          idToken,
           redirect: false,
           callbackUrl,
         });

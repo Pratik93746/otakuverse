@@ -1,11 +1,16 @@
 'use client';
 
+import { notFound } from 'next/navigation';
 import { useState } from 'react';
 import { RazorpayCheckoutButton } from '@/components/RazorpayCheckoutButton';
 import { ShieldCheck, CheckCircle2, XCircle, RefreshCw, ArrowLeft } from 'lucide-react';
 import Link from 'next/link';
 
 export default function PaymentTestPage() {
+  if (process.env.NODE_ENV === 'production') {
+    notFound();
+  }
+
   const [amountRupees, setAmountRupees] = useState<number>(1);
   const [customerName, setCustomerName] = useState<string>('Test Collector');
   const [customerEmail, setCustomerEmail] = useState<string>('collector@example.com');

@@ -18,13 +18,13 @@ const sortOptions = [
 ];
 
 const categoryOptions = [
-  { slug: '', label: 'All Products', emoji: '🔥' },
-  { slug: 'figures', label: 'Figures', emoji: '🥷' },
-  { slug: 'katanas', label: 'Katanas', emoji: '🗡️' },
-  { slug: 'keychains', label: 'Keychains', emoji: '🗝️' },
-  { slug: 'clothing', label: 'Clothing', emoji: '🥋' },
-  { slug: 'collectables', label: 'Collectables', emoji: '💎' },
-  { slug: 'limited-editions', label: 'Limited Editions', emoji: '⭐' },
+  { slug: '', label: 'All Posters & Art', emoji: '🔥' },
+  { slug: 'anime-posters', label: 'Anime Posters', emoji: '🖼️' },
+  { slug: 'framed-canvas', label: 'Framed Canvas', emoji: '🎨' },
+  { slug: 'minimalist-prints', label: 'Minimalist Prints', emoji: '✨' },
+  { slug: 'manga-panels', label: 'Manga Panels', emoji: '📖' },
+  { slug: 'vintage-wall-art', label: 'Vintage Wall Art', emoji: '📜' },
+  { slug: 'poster-sets', label: 'Duo & Multi Sets', emoji: '⭐' },
 ];
 
 const animeOptions = [

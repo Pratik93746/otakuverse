@@ -1,7 +1,8 @@
 const sanitizeString = (val) => {
   if (typeof val !== 'string') return '';
-  // Strip dangerous mongodb operator characters if input starts with $
-  return val.replace(/^\$/, '').trim();
+  // Strip dangerous mongodb operator characters, trim, cap to 100 chars, and escape regex special characters to prevent ReDoS
+  const clean = val.replace(/^\$/, '').trim().slice(0, 100);
+  return clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
 
 const validateProductQuery = (req) => {

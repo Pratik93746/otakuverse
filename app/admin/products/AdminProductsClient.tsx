@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useMemo, useRef } from 'react';
+import { useState, useMemo, useRef, useEffect } from 'react';
 import Image from 'next/image';
 import Link from 'next/link';
 import {
@@ -12,8 +12,12 @@ import {
   X,
   ExternalLink,
   Loader2,
+  HardDrive,
+  AlertTriangle,
+  AlertOctagon,
+  RefreshCw,
 } from 'lucide-react';
-import { formatPrice } from '@/lib/utils';
+import { formatPrice, normalizeImageUrl } from '@/lib/utils';
 import toast from 'react-hot-toast';
 import { fetchWithAuth } from '@/lib/api-client';
 
@@ -39,6 +43,19 @@ export interface AdminProductItem {
   sku?: string | null;
 }
 
+export interface StorageInfo {
+  configured: boolean;
+  totalMB: string;
+  maxMB: string;
+  remainingMB: string;
+  totalFiles: number;
+  usedPercentage: number;
+  isNearLimit: boolean;
+  isCritical: boolean;
+  isFull: boolean;
+  estimatedRemainingPosters: number;
+}
+
 const EXISTING_ANIME = [
   'Dragon Ball',
   'Naruto Shippuden',
@@ -57,12 +74,13 @@ const EXISTING_ANIME = [
 ];
 
 export const STORE_CATEGORIES = [
-  { name: 'Figures', slug: 'figures', emoji: '🥷', desc: 'Action Figures & Statues' },
-  { name: 'Katanas', slug: 'katanas', emoji: '🗡️', desc: 'Metal & Wood Nichirin Blades' },
-  { name: 'Keychains', slug: 'keychains', emoji: '🗝️', desc: 'Spinners, Charms & Emblems' },
-  { name: 'Clothing', slug: 'clothing', emoji: '🥋', desc: 'Streetwear, Hoodies & Tees' },
-  { name: 'Collectables', slug: 'collectables', emoji: '💎', desc: 'Plushies, Devil Fruits & Replicas' },
-  { name: 'Limited Editions', slug: 'limited-editions', emoji: '⭐', desc: 'Vault & Exclusive Collector Editions' },
+  { name: 'Anime Posters', slug: 'anime-posters', emoji: '🖼️', desc: 'Ultra-HD Fine Art Prints & Posters' },
+  { name: 'Framed Canvas', slug: 'framed-canvas', emoji: '🎨', desc: 'Gallery-Wrapped Canvas Wall Art' },
+  { name: 'Minimalist Prints', slug: 'minimalist-prints', emoji: '✨', desc: 'Modern Minimalist Anime Wall Art' },
+  { name: 'Manga Panels', slug: 'manga-panels', emoji: '📖', desc: 'Monochrome High-GSM Manga Art' },
+  { name: 'Vintage Wall Art', slug: 'vintage-wall-art', emoji: '📜', desc: 'Retro Japanese Aesthetic Posters' },
+  { name: 'Duo & Multi Sets', slug: 'poster-sets', emoji: '⭐', desc: 'Curated 2-Piece & 3-Piece Wall Sets' },
+  { name: 'Figures & Collectibles', slug: 'figures', emoji: '🥷', desc: 'Action Figures & Statues' },
 ];
 
 export function AdminProductsClient({ initialProducts }: { initialProducts: AdminProductItem[] }) {
@@ -82,13 +100,38 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
   const [formAnime, setFormAnime] = useState('Naruto Shippuden');
   const [formCustomAnime, setFormCustomAnime] = useState('');
   const [formCharacter, setFormCharacter] = useState('');
-  const [formCategory, setFormCategory] = useState('Figures');
+  const [formCategory, setFormCategory] = useState('Anime Posters');
   const [formBadge, setFormBadge] = useState<'standard' | 'new' | 'bestseller' | 'limited' | 'preorder'>('new');
   const [formDescription, setFormDescription] = useState('');
   const [formImage, setFormImage] = useState('');
   const [imagePreview, setImagePreview] = useState<string | null>(null);
+  const [uploadingImage, setUploadingImage] = useState(false);
+  const [storageInfo, setStorageInfo] = useState<StorageInfo | null>(null);
+  const [loadingStorage, setLoadingStorage] = useState(false);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Fetch live storage usage from Vercel Blob
+  const fetchStorageStatus = async (force = false) => {
+    setLoadingStorage(true);
+    try {
+      const res = await fetchWithAuth(`/api/admin/upload${force ? '?refresh=true' : ''}`);
+      if (res.ok) {
+        const data = await res.json();
+        if (data.configured) {
+          setStorageInfo(data);
+        }
+      }
+    } catch {
+      // ignore
+    } finally {
+      setLoadingStorage(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchStorageStatus();
+  }, []);
 
   // Calculate live discount percentage
   const calculatedDiscount = useMemo(() => {
@@ -100,24 +143,106 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
     return 0;
   }, [formPrice, formCompareAt]);
 
-  // Handle Photo Upload (file or camera)
+  // Upload compressed photo to Vercel Blob if configured, or keep local data URI
+  const uploadImageBlob = async (compressedWebp: string, fileName: string) => {
+    setUploadingImage(true);
+    try {
+      const res = await fetchWithAuth('/api/admin/upload', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ base64: compressedWebp, filename: fileName }),
+      });
+
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) {
+          setFormImage(data.url);
+          setImagePreview(data.url);
+          const savedMsg = data.savedPercentage ? ` (Saved ${data.savedPercentage}% size)` : '';
+          toast.success(`Uploaded & compressed (${data.compressedKB || '120'} KB)! 🚀${savedMsg}`);
+          fetchStorageStatus(true);
+          return;
+        }
+      } else {
+        const errData = await res.json().catch(() => ({}));
+        if (errData.storageFull) {
+          toast.error(errData.error || '1 GB Vercel Blob storage limit reached! Upload blocked.');
+          fetchStorageStatus(true);
+          return;
+        }
+      }
+      // If Vercel Blob is not configured, fallback to client-side compressed data URI
+      setImagePreview(compressedWebp);
+      setFormImage(compressedWebp);
+      toast.success('Photo optimized! 📸');
+    } catch {
+      setImagePreview(compressedWebp);
+      setFormImage(compressedWebp);
+      toast.success('Photo attached! 📸');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  // Handle Photo Upload (file or camera) with automatic in-browser compression
   const handlePhotoSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 5 * 1024 * 1024) {
-      toast.error('Image size must be less than 5MB');
+    if (file.size > 10 * 1024 * 1024) {
+      toast.error('Image size must be less than 10MB');
       return;
     }
 
     const reader = new FileReader();
     reader.onload = () => {
-      const result = reader.result as string;
-      setImagePreview(result);
-      setFormImage(result);
-      toast.success('Photo attached! 📸');
+      const rawData = reader.result as string;
+      const img = new window.Image();
+      img.onload = () => {
+        const canvas = document.createElement('canvas');
+        const maxDim = 1200;
+        let width = img.width;
+        let height = img.height;
+
+        if (width > height && width > maxDim) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else if (height > maxDim) {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext('2d');
+        if (ctx) {
+          ctx.drawImage(img, 0, 0, width, height);
+          const compressed = canvas.toDataURL('image/webp', 0.82);
+          setImagePreview(compressed);
+          uploadImageBlob(compressed, file.name);
+        } else {
+          setImagePreview(rawData);
+          setFormImage(rawData);
+          toast.success('Photo attached! 📸');
+        }
+      };
+      img.onerror = () => {
+        setImagePreview(rawData);
+        setFormImage(rawData);
+      };
+      img.src = rawData;
     };
     reader.readAsDataURL(file);
+  };
+
+  // Handle direct image URL change (supports GitHub repository links auto-converted to jsDelivr CDN)
+  const handleImageUrlChange = (val: string) => {
+    const normalized = normalizeImageUrl(val);
+    setFormImage(normalized);
+    setImagePreview(normalized);
+    if (val.trim() && normalized !== val && normalized.includes('cdn.jsdelivr.net')) {
+      toast.success('⚡ GitHub link detected: converted to high-speed jsDelivr CDN!');
+    }
   };
 
   // Handle Submit New Product
@@ -350,13 +475,13 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
               <span className="bg-purple-600 text-white text-[10px] font-bold px-2 py-0.5 uppercase tracking-wider">
                 Admin Catalog
               </span>
-              <span className="text-xs text-gray-500">Live Figure Management</span>
+              <span className="text-xs text-gray-500">Live Poster & Art Prints Catalog</span>
             </div>
             <h1 className="font-heading text-3xl tracking-wide uppercase">
-              FIGURES & INVENTORY ({products.length})
+              POSTERS & ART PRINTS ({products.length})
             </h1>
             <p className="text-xs text-gray-500 mt-1">
-              Add new figures, take/upload photos, configure pricing, badges (New Arrival, Bestseller), and stock
+              Add new posters, upload photos/links, configure pricing, badges (New Arrival, Bestseller), and stock
             </p>
           </div>
 
@@ -364,8 +489,91 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
             onClick={() => setModalOpen(true)}
             className="btn-primary text-xs py-3 px-5 flex items-center gap-2 self-start cursor-pointer shadow-md hover:scale-[1.02] transition-transform"
           >
-            <Plus className="w-4 h-4" /> Add New Figure
+            <Plus className="w-4 h-4" /> Add New Poster
           </button>
+        </div>
+
+        {/* ──────────────────────────────────────────────
+            STORAGE MONITOR & 1 GB QUOTA GUARD
+            ────────────────────────────────────────────── */}
+        <div className="bg-white border border-gray-200 p-4 mb-6 rounded-sm shadow-xs">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-2">
+            <div className="flex items-center gap-2">
+              <HardDrive className="w-4 h-4 text-purple-600" />
+              <span className="font-heading uppercase text-xs font-bold tracking-wider text-gray-900">
+                Cloud Storage Monitor (Vercel Blob 1 GB Free Tier)
+              </span>
+              <span className="text-[10px] bg-green-100 text-green-700 font-bold px-2 py-0.5 rounded-full">
+                BOM1 Mumbai
+              </span>
+            </div>
+
+            <div className="flex items-center gap-3 text-xs">
+              <button
+                type="button"
+                onClick={() => fetchStorageStatus(true)}
+                disabled={loadingStorage}
+                className="text-[11px] text-gray-500 hover:text-gray-900 flex items-center gap-1 cursor-pointer disabled:opacity-50"
+                title="Sync live storage from Vercel Blob"
+              >
+                <RefreshCw className={`w-3 h-3 ${loadingStorage ? 'animate-spin' : ''}`} />
+                <span>Sync Storage</span>
+              </button>
+            </div>
+          </div>
+
+          {/* Progress Bar */}
+          <div className="space-y-1.5">
+            <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+              <div
+                className={`h-full transition-all duration-500 ${
+                  (storageInfo?.usedPercentage || 0) >= 95
+                    ? 'bg-red-600'
+                    : (storageInfo?.usedPercentage || 0) >= 80
+                    ? 'bg-amber-500'
+                    : 'bg-emerald-500'
+                }`}
+                style={{ width: `${Math.max(0.5, Math.min(100, storageInfo?.usedPercentage || 0.5))}%` }}
+              />
+            </div>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between text-[11px] text-gray-500 gap-1">
+              <span className="font-medium text-gray-700">
+                Used: <strong className="text-gray-900">{storageInfo?.totalMB || '0.00'} MB</strong> / 1,024 MB ({storageInfo?.usedPercentage || 0}%)
+              </span>
+              <span>
+                {storageInfo?.totalFiles || 0} posters stored • <strong>~{storageInfo?.estimatedRemainingPosters?.toLocaleString() || '8,500'}</strong> poster slots remaining (with auto-compression)
+              </span>
+            </div>
+          </div>
+
+          {/* Warning Banners based on threshold */}
+          {storageInfo?.isFull && (
+            <div className="mt-3 p-3 bg-red-50 border border-red-300 rounded text-red-800 text-xs flex items-center gap-2">
+              <AlertOctagon className="w-4 h-4 text-red-600 flex-shrink-0" />
+              <div>
+                <strong>Storage Full (1 GB Limit Reached):</strong> Uploads are paused to prevent billing. Delete old posters from catalog or upgrade your Vercel Blob store to continue uploading.
+              </div>
+            </div>
+          )}
+
+          {storageInfo?.isCritical && !storageInfo?.isFull && (
+            <div className="mt-3 p-3 bg-red-50 border border-red-200 rounded text-red-700 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-red-500 flex-shrink-0" />
+              <div>
+                <strong>Critical Warning:</strong> You have reached {storageInfo.usedPercentage}% of the 1 GB free storage limit (only {storageInfo.remainingMB} MB left). Free up space soon.
+              </div>
+            </div>
+          )}
+
+          {storageInfo?.isNearLimit && !storageInfo?.isCritical && (
+            <div className="mt-3 p-3 bg-amber-50 border border-amber-200 rounded text-amber-800 text-xs flex items-center gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-600 flex-shrink-0" />
+              <div>
+                <strong>Notice:</strong> Storage is {storageInfo.usedPercentage}% full ({storageInfo.remainingMB} MB remaining). Auto-compression is active and saves ~85% space per photo.
+              </div>
+            </div>
+          )}
         </div>
 
         {/* Filter Controls Bar */}
@@ -376,7 +584,7 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
               <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
               <input
                 type="text"
-                placeholder="Search figure by name, character, anime or slug..."
+                placeholder="Search poster by title, character, anime or slug..."
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
                 className="w-full pl-9 pr-3 py-2 text-xs bg-gray-50 border border-gray-200 rounded-sm focus:bg-white focus:border-brand-red outline-none"
@@ -436,7 +644,7 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
             <table className="w-full text-left text-xs">
               <thead className="bg-gray-50 text-gray-500 uppercase tracking-wider border-b">
                 <tr>
-                  <th className="py-3.5 px-4">Figure & Specifications</th>
+                  <th className="py-3.5 px-4">Poster & Specifications</th>
                   <th className="py-3.5 px-4">Franchise & Character</th>
                   <th className="py-3.5 px-4">Price & Discount</th>
                   <th className="py-3.5 px-4">Stock</th>
@@ -667,10 +875,10 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
                 </div>
                 <div>
                   <h2 className="font-heading text-xl font-bold uppercase tracking-wider text-gray-900">
-                    Add New Anime Figure
+                    Add New Poster / Art Print
                   </h2>
                   <p className="text-xs text-gray-500">
-                    Upload/snap photo, set anime category, pricing, badges and stock
+                    Upload photo or paste GitHub link, set anime category, pricing, badges and stock
                   </p>
                 </div>
               </div>
@@ -687,12 +895,17 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
               {/* Photo Upload & Camera Snapshot */}
               <div>
                 <label className="block text-xs font-bold uppercase tracking-wider text-gray-800 mb-2">
-                  1. Figure Photo / Image <span className="text-brand-red">*</span>
+                  1. Poster Artwork / Image <span className="text-brand-red">*</span>
                 </label>
                 <div className="flex flex-col sm:flex-row gap-4 items-center">
                   {/* Photo Preview Box */}
                   <div className="w-32 h-36 bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg relative overflow-hidden flex items-center justify-center flex-shrink-0">
-                    {imagePreview || formImage ? (
+                    {uploadingImage ? (
+                      <div className="text-center p-2 text-gray-500">
+                        <Loader2 className="w-6 h-6 animate-spin mx-auto mb-1 text-brand-red" />
+                        <span className="text-[10px]">Uploading...</span>
+                      </div>
+                    ) : imagePreview || formImage ? (
                       <>
                         <img
                           src={imagePreview || formImage}
@@ -713,7 +926,7 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
                     ) : (
                       <div className="text-center p-2 text-gray-400">
                         <Camera className="w-6 h-6 mx-auto mb-1 text-gray-400" />
-                        <span className="text-[10px]">No Photo</span>
+                        <span className="text-[10px]">No Artwork</span>
                       </div>
                     )}
                   </div>
@@ -724,7 +937,8 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
                       <button
                         type="button"
                         onClick={() => fileInputRef.current?.click()}
-                        className="btn-dark text-xs py-2 px-3.5 flex items-center gap-1.5 cursor-pointer"
+                        disabled={uploadingImage || !!storageInfo?.isFull}
+                        className="btn-dark text-xs py-2 px-3.5 flex items-center gap-1.5 cursor-pointer disabled:opacity-50"
                       >
                         <Upload className="w-3.5 h-3.5" /> Choose / Click Photo
                       </button>
@@ -737,34 +951,36 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
                         className="hidden"
                       />
                     </div>
+                    {storageInfo?.isFull && (
+                      <p className="text-[10px] text-red-600 font-bold">
+                        ⛔ 1 GB free storage is full! Uploads are locked until old posters are removed.
+                      </p>
+                    )}
                     <div className="relative">
                       <input
                         type="text"
-                        placeholder="Or paste direct image URL (e.g. https://... or /custom/...)"
+                        placeholder="Or paste direct image URL (e.g. GitHub link, jsDelivr, /catalog/...)"
                         value={formImage.startsWith('data:') ? '' : formImage}
-                        onChange={(e) => {
-                          setFormImage(e.target.value);
-                          setImagePreview(e.target.value);
-                        }}
+                        onChange={(e) => handleImageUrlChange(e.target.value)}
                         className="w-full py-2 px-3 bg-gray-50 border border-gray-200 rounded text-xs focus:bg-white focus:border-brand-red outline-none"
                       />
                     </div>
-                    <p className="text-[10px] text-gray-400">
-                      Supports JPG, PNG, WEBP from your camera roll or direct web link.
+                    <p className="text-[10px] text-gray-500">
+                      ⚡ <strong>Dual Auto-Compressor Active:</strong> Images are compressed to ~120KB WebP on upload (saving ~85% storage space). Current usage: {storageInfo?.totalMB || '0.00'} MB / 1,024 MB.
                     </p>
                   </div>
                 </div>
               </div>
 
-              {/* Figure Title */}
+              {/* Poster Title */}
               <div>
                 <label className="block font-bold uppercase tracking-wider text-gray-800 mb-1">
-                  2. Figure Name / Title <span className="text-brand-red">*</span>
+                  2. Poster Title / Name <span className="text-brand-red">*</span>
                 </label>
                 <input
                   type="text"
                   required
-                  placeholder="e.g. Sasuke Uchiha Rinnegan & Chidori 1/7 Scale Statue"
+                  placeholder="e.g. Sasuke Uchiha Rinnegan & Chidori Archival Matte Poster"
                   value={formName}
                   onChange={(e) => setFormName(e.target.value)}
                   className="w-full py-2.5 px-3 bg-gray-50 border border-gray-200 rounded text-xs text-gray-900 focus:bg-white focus:border-brand-red outline-none font-medium"

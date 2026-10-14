@@ -29,22 +29,23 @@ export async function verifyAdminRequest(request: NextRequest): Promise<boolean>
     if (session?.user) {
       const email = session.user.email?.toLowerCase().trim();
       const role = session.user.role;
-      if (role === 'ADMIN' || isAllowedAdminEmail(email)) {
-        return true;
-      }
-
-      // Check MongoDB user role
       const userId = (session.user as any).firebaseUid || (session.user as any).id;
-      if (userId || email) {
+
+      // Check MongoDB user role directly for authoritative server-side check
+      if (userId) {
         try {
           const { findUserByFirebaseUid } = await import('@/lib/db/users');
-          const dbUser = await findUserByFirebaseUid(userId || email!);
+          const dbUser = await findUserByFirebaseUid(userId);
           if (dbUser && dbUser.role === 'ADMIN') {
             return true;
           }
         } catch {
           // ignore
         }
+      }
+
+      if (role === 'ADMIN' && email && isAllowedAdminEmail(email, true)) {
+        return true;
       }
     }
   } catch {

@@ -1,4 +1,5 @@
 const crypto = require('crypto');
+const mongoose = require('mongoose');
 const Razorpay = require('razorpay');
 const env = require('../config/env');
 const Order = require('../models/Order');
@@ -111,52 +112,61 @@ class PaymentService {
       throw new Error('Payment signature verification failed.');
     }
 
-    // 1. Mark Order as PAID and CONFIRMED
-    order.paymentStatus = 'PAID';
-    order.orderStatus = 'CONFIRMED';
-    order.razorpayPaymentId = razorpayPaymentId;
-    order.paymentId = razorpayPaymentId;
-    await order.save();
-
-    // 2. Create Payment record
-    await Payment.create({
-      orderId: order._id,
-      orderNumber: order.orderNumber,
-      userId: order.userId,
-      provider: 'razorpay',
-      providerOrderId: razorpayOrderId,
-      providerPaymentId: razorpayPaymentId,
-      amount: order.totalAmount,
-      currency: order.currency,
-      status: 'CAPTURED',
-      signatureVerified: true,
-    });
-
-    // 3. Atomically decrement stock for each ordered item with negative stock prevention (Section 28)
-    for (const item of order.items) {
-      const query = {
-        $or: [
-          { _id: item.productId },
-          { slug: item.productId },
-          ...(mongoose.Types.ObjectId.isValid(item.productId) ? [{ _id: item.productId }] : []),
-        ],
-        stock: { $gte: item.quantity },
-      };
-      const updated = await Product.findOneAndUpdate(
-        query,
-        { $inc: { stock: -item.quantity } },
-        { new: true }
-      );
-      if (updated && updated.stock <= 0) {
-        await Product.updateOne({ _id: updated._id }, { $set: { isSoldOut: true } });
-      }
-    }
-
-    // 4. Clear user cart upon successful purchase (Section 27)
-    await Cart.findOneAndUpdate(
-      { userId: order.userId },
-      { $set: { items: [] } }
+    // 1. Atomic Compare-And-Swap (CAS) to mark Order as PAID (SEC-HIGH-02)
+    const claimedOrder = await Order.findOneAndUpdate(
+      { _id: order._id, paymentStatus: { $ne: 'PAID' } },
+      {
+        $set: {
+          paymentStatus: 'PAID',
+          orderStatus: 'CONFIRMED',
+          razorpayPaymentId: razorpayPaymentId,
+          paymentId: razorpayPaymentId,
+        },
+      },
+      { new: true }
     );
+
+    // 2. Create Payment record if claimed
+    if (claimedOrder) {
+      await Payment.create({
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        userId: order.userId,
+        provider: 'razorpay',
+        providerOrderId: razorpayOrderId,
+        providerPaymentId: razorpayPaymentId,
+        amount: order.totalAmount,
+        currency: order.currency,
+        status: 'CAPTURED',
+        signatureVerified: true,
+      });
+
+      // 3. Atomically decrement stock for each ordered item
+      for (const item of order.items) {
+        const query = {
+          $or: [
+            { _id: item.productId },
+            { slug: item.productId },
+            ...(mongoose.Types.ObjectId.isValid(item.productId) ? [{ _id: item.productId }] : []),
+          ],
+          stock: { $gte: item.quantity },
+        };
+        const updated = await Product.findOneAndUpdate(
+          query,
+          { $inc: { stock: -item.quantity } },
+          { new: true }
+        );
+        if (updated && updated.stock <= 0) {
+          await Product.updateOne({ _id: updated._id }, { $set: { isSoldOut: true } });
+        }
+      }
+
+      // 4. Clear user cart upon successful purchase
+      await Cart.findOneAndUpdate(
+        { userId: order.userId },
+        { $set: { items: [] } }
+      );
+    }
 
     return {
       success: true,
@@ -167,23 +177,37 @@ class PaymentService {
   }
 
   /**
-   * Razorpay Webhook Handler for asynchronous server-to-server notifications
+   * Razorpay Webhook Handler for asynchronous server-to-server notifications.
+   * Strictly enforces cryptographic signature and fail-closed security.
    */
   async handleWebhook(rawBody, signature) {
     const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || env.RAZORPAY_KEY_SECRET;
 
-    if (webhookSecret && signature) {
-      const expectedSignature = crypto
-        .createHmac('sha256', webhookSecret)
-        .update(rawBody)
-        .digest('hex');
-
-      if (expectedSignature !== signature) {
-        throw new Error('Invalid webhook signature');
-      }
+    if (!signature) {
+      throw new Error('Unauthorized: Missing x-razorpay-signature header.');
     }
 
-    const payload = typeof rawBody === 'string' ? JSON.parse(rawBody) : rawBody;
+    if (!webhookSecret) {
+      throw new Error('Server configuration error: Webhook secret is not configured.');
+    }
+
+    const rawBuffer = Buffer.isBuffer(rawBody)
+      ? rawBody
+      : Buffer.from(typeof rawBody === 'string' ? rawBody : JSON.stringify(rawBody));
+
+    const expectedSignature = crypto
+      .createHmac('sha256', webhookSecret)
+      .update(rawBuffer)
+      .digest('hex');
+
+    const isValid = expectedSignature.length === signature.length &&
+      crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature));
+
+    if (!isValid) {
+      throw new Error('Invalid webhook signature.');
+    }
+
+    const payload = JSON.parse(rawBuffer.toString('utf8'));
     const event = payload.event;
 
     if (event === 'payment.captured' || event === 'order.paid') {
@@ -200,33 +224,43 @@ class PaymentService {
         matchedOrder = await Order.findOne({ razorpayOrderId });
       }
 
-      if (matchedOrder && matchedOrder.paymentStatus !== 'PAID') {
-        matchedOrder.paymentStatus = 'PAID';
-        matchedOrder.orderStatus = 'CONFIRMED';
-        matchedOrder.razorpayPaymentId = paymentId;
-        matchedOrder.paymentId = paymentId;
-        await matchedOrder.save();
+      if (matchedOrder) {
+        // Atomic CAS update: only decrement stock if this thread flipped the status
+        const claimed = await Order.findOneAndUpdate(
+          { _id: matchedOrder._id, paymentStatus: { $ne: 'PAID' } },
+          {
+            $set: {
+              paymentStatus: 'PAID',
+              orderStatus: 'CONFIRMED',
+              razorpayPaymentId: paymentId,
+              paymentId: paymentId,
+            },
+          },
+          { new: true }
+        );
 
-        for (const item of matchedOrder.items) {
-          const query = {
-            $or: [
-              { _id: item.productId },
-              { slug: item.productId },
-              ...(mongoose.Types.ObjectId.isValid(item.productId) ? [{ _id: item.productId }] : []),
-            ],
-            stock: { $gte: item.quantity },
-          };
-          const updated = await Product.findOneAndUpdate(
-            query,
-            { $inc: { stock: -item.quantity } },
-            { new: true }
-          );
-          if (updated && updated.stock <= 0) {
-            await Product.updateOne({ _id: updated._id }, { $set: { isSoldOut: true } });
+        if (claimed) {
+          for (const item of matchedOrder.items) {
+            const query = {
+              $or: [
+                { _id: item.productId },
+                { slug: item.productId },
+                ...(mongoose.Types.ObjectId.isValid(item.productId) ? [{ _id: item.productId }] : []),
+              ],
+              stock: { $gte: item.quantity },
+            };
+            const updated = await Product.findOneAndUpdate(
+              query,
+              { $inc: { stock: -item.quantity } },
+              { new: true }
+            );
+            if (updated && updated.stock <= 0) {
+              await Product.updateOne({ _id: updated._id }, { $set: { isSoldOut: true } });
+            }
           }
-        }
 
-        await Cart.findOneAndUpdate({ userId: matchedOrder.userId }, { $set: { items: [] } });
+          await Cart.findOneAndUpdate({ userId: matchedOrder.userId }, { $set: { items: [] } });
+        }
       }
     }
 

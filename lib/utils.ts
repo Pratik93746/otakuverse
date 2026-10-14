@@ -54,3 +54,46 @@ export function debounce<T extends (...args: unknown[]) => unknown>(
     timer = setTimeout(() => fn(...args), delay);
   };
 }
+
+/**
+ * Normalizes image URLs:
+ * - Detects GitHub repository links (github.com/.../blob/...) and raw URLs (raw.githubusercontent.com)
+ * - Automatically transforms them into free, high-speed, edge-cached jsDelivr CDN URLs
+ * - Leaves relative paths (/catalog/...) and data URIs (data:image/...) untouched
+ */
+export function normalizeImageUrl(url: string): string {
+  if (!url || typeof url !== 'string') return '';
+  const trimmed = url.trim();
+
+  // Local static asset or in-browser base64 data URI
+  if (trimmed.startsWith('/') || trimmed.startsWith('data:')) {
+    return trimmed;
+  }
+
+  try {
+    // 1. https://github.com/:owner/:repo/blob/:branch/:path or raw
+    const ghMatch = trimmed.match(
+      /^https?:\/\/github\.com\/([^/]+)\/([^/]+)\/(?:blob|raw)\/(?:refs\/heads\/)?([^/]+)\/(.+)$/i
+    );
+    if (ghMatch) {
+      const [, owner, repo, branch, filePath] = ghMatch;
+      const cleanPath = filePath.split('?')[0].split('#')[0];
+      return `https://cdn.jsdelivr.net/gh/${owner}/${repo}@${branch}/${cleanPath}`;
+    }
+
+    // 2. https://raw.githubusercontent.com/:owner/:repo/:branch/:path
+    const rawMatch = trimmed.match(
+      /^https?:\/\/raw\.githubusercontent\.com\/([^/]+)\/([^/]+)\/(?:refs\/heads\/)?([^/]+)\/(.+)$/i
+    );
+    if (rawMatch) {
+      const [, owner, repo, branch, filePath] = rawMatch;
+      const cleanPath = filePath.split('?')[0].split('#')[0];
+      return `https://cdn.jsdelivr.net/gh/${owner}/${repo}@${branch}/${cleanPath}`;
+    }
+  } catch {
+    return trimmed;
+  }
+
+  return trimmed;
+}
+

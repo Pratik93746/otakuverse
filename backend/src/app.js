@@ -24,8 +24,15 @@ app.use(helmet());
 // CORS Configuration (Section 19)
 app.use(cors(corsOptions));
 
-// Body Parsing with safe size limits to prevent oversized payload attacks (Section 38)
-app.use(express.json({ limit: '1mb' }));
+// Body Parsing with safe size limits and rawBody preservation for webhooks
+app.use(
+  express.json({
+    limit: '1mb',
+    verify: (req, res, buf) => {
+      req.rawBody = buf;
+    },
+  })
+);
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
 
 // Global Rate Limiting

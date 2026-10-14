@@ -48,6 +48,15 @@ const validateOrderCreate = (req) => {
     return 'A valid 6-digit Indian postal PIN code is required.';
   }
 
+  // Reject untrusted client discount parameters
+  if (req.body.discount !== undefined && Number(req.body.discount) > 0) {
+    return 'Arbitrary client discount values are not permitted. Please provide a valid couponCode instead.';
+  }
+
+  if (req.body.couponCode && (typeof req.body.couponCode !== 'string' || req.body.couponCode.trim().length > 32)) {
+    return 'couponCode must be a valid string up to 32 characters.';
+  }
+
   return null;
 };
 

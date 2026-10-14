@@ -7,18 +7,25 @@ class UserService {
    * Sync or upsert user profile based on verified Firebase auth identity
    */
   async syncUser(firebaseUser) {
-    const { uid, email, name, picture } = firebaseUser;
+    const { uid, email, name, picture, decodedToken } = firebaseUser;
     const cleanEmail = (email || '').toLowerCase().trim();
+    const isEmailVerified = decodedToken ? !!decodedToken.email_verified : false;
 
-    // Check if approved admin email
-    const isAdmin = cleanEmail && env.ADMIN_EMAILS.includes(cleanEmail);
+    // Check if approved admin email — STRICTLY requires verified email
+    const isAdmin = isEmailVerified && cleanEmail && Array.isArray(env.ADMIN_EMAILS) && env.ADMIN_EMAILS.includes(cleanEmail);
 
-    let user = await User.findOne({
-      $or: [{ authProviderId: uid }, { email: cleanEmail }],
-    });
+    // Look up by authProviderId first (primary secure identity)
+    let user = await User.findOne({ authProviderId: uid });
+
+    // Fallback: If not found by UID, only match by email if email is cryptographically verified
+    if (!user && cleanEmail && isEmailVerified) {
+      user = await User.findOne({ email: cleanEmail });
+      if (user && !user.authProviderId) {
+        user.authProviderId = uid;
+      }
+    }
 
     if (user) {
-      if (!user.authProviderId) user.authProviderId = uid;
       if (isAdmin && user.role !== 'ADMIN') user.role = 'ADMIN';
       if (name && !user.name) user.name = name;
       if (picture && !user.avatar) user.avatar = picture;
