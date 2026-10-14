@@ -38,6 +38,7 @@ export default async function AdminOrdersPage() {
       total: o.total,
       status: o.orderStatus,
       paymentStatus: o.payment?.paymentStatus || 'PENDING',
+      reviewFlags: o.reviewFlags || [],
       paymentMethod: o.payment?.paymentMethod || 'RAZORPAY',
       createdAt: o.createdAt,
     }));

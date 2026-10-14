@@ -1,7 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { calculateCouponDiscount } from '@/lib/coupons';
+import { rateLimit } from '@/lib/rate-limit';
 
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'coupon', 20);
+  if (!limited.ok) {
+    return NextResponse.json({ error: 'Too many attempts. Please wait a minute.' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } });
+  }
   try {
     const { code, orderTotal = 0 } = await request.json();
 

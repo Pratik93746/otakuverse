@@ -1,6 +1,8 @@
+import { rateLimit } from '@/lib/rate-limit';
 import { NextRequest, NextResponse } from 'next/server';
 
 export async function GET(req: NextRequest) {
+  { const rl = rateLimit(req, 'geocode', 30); if (!rl.ok) return NextResponse.json({ error: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }); }
   try {
     const { searchParams } = new URL(req.url);
     const lat = searchParams.get('lat');

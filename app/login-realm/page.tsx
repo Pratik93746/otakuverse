@@ -1,5 +1,6 @@
 'use client';
 
+import { safeRedirectPath } from '@/lib/safe-redirect';
 import { Suspense, useState } from 'react';
 import Link from 'next/link';
 import Image from 'next/image';
@@ -392,7 +393,7 @@ function PowerLevelGauge({ email, password, theme }: { email: string; password: 
 function OlderLoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const callbackUrl = searchParams.get('callbackUrl') ?? '/';
+  const callbackUrl = safeRedirectPath(searchParams.get('callbackUrl'));
 
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');

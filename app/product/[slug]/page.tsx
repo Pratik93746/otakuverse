@@ -3,6 +3,9 @@ import type { Metadata } from 'next';
 import { ProductPageClient } from './ProductPageClient';
 import { getProductByIdOrSlug, getProducts } from '@/lib/db/products';
 import { MOCK_PRODUCTS } from '@/lib/mockProducts';
+import { jsonLdString } from '@/lib/json-ld';
+
+export const revalidate = 60;
 
 interface Props {
   params: Promise<{ slug: string }> | { slug: string };
@@ -207,11 +210,11 @@ export default async function ProductPage({ params }: Props) {
     <>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(productJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdString(productJsonLd) }}
       />
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }}
+        dangerouslySetInnerHTML={{ __html: jsonLdString(breadcrumbJsonLd) }}
       />
       <ProductPageClient product={product as any} related={related} />
     </>

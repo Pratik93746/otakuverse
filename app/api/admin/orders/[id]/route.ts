@@ -5,7 +5,7 @@ import { recordAudit } from '@/lib/db/audit';
 import { checkAdminTransition } from '@/lib/orders/lifecycle';
 import { refundOrderInFull } from '@/lib/payments/refund';
 import { ORDER_STATUSES, parseTracking } from '@/lib/validation/order';
-import { isStockHeld } from '@/lib/orders/lifecycle';
+import { isStockHeld, isCod } from '@/lib/orders/lifecycle';
 import { OrderStatus } from '@/lib/db/types';
 
 const forbidden = () => NextResponse.json({ error: 'Unauthorized: Admin privileges required' }, { status: 403 });
@@ -82,6 +82,7 @@ export async function PATCH(request: NextRequest, context: { params: Promise<{ i
     const updated = await transitionOrderStatus(id, order.orderStatus, status, actor.email, {
       tracking: status === 'SHIPPED' ? tracking.value : undefined,
       note: refundInfo ? `refunded ₹${refundInfo.amount}` : undefined,
+      markPaid: status === 'DELIVERED' && isCod(order),
     });
     if (!updated) {
       return NextResponse.json({ error: 'This order was just changed by someone else. Please refresh the page and check its status.' }, { status: 409 });

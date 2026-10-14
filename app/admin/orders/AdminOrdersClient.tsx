@@ -11,12 +11,9 @@ import {
   MapPin,
   Clock,
   CreditCard,
-  ChevronDown,
 } from 'lucide-react';
 import { formatPrice } from '@/lib/utils';
 import { MOCK_PRODUCTS } from '@/lib/mockProducts';
-import toast from 'react-hot-toast';
-import { fetchWithAuth } from '@/lib/api-client';
 
 export interface AdminOrderItem {
   productId: string;
@@ -53,6 +50,7 @@ export interface AdminOrderRow {
   total: number;
   status: string;
   paymentStatus: string;
+  reviewFlags?: string[];
   paymentMethod: string;
   createdAt: string;
 }
@@ -62,31 +60,13 @@ export function AdminOrdersClient({ initialOrders }: { initialOrders: AdminOrder
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [paymentFilter, setPaymentFilter] = useState('ALL');
-  const [updatingId, setUpdatingId] = useState<string | null>(null);
 
-  // Quick order status update directly from table
-  const handleQuickStatusChange = async (orderNumber: string, newStatus: string) => {
-    setUpdatingId(orderNumber);
-    try {
-      const res = await fetchWithAuth(`/api/admin/orders/${orderNumber}`, {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus }),
-      });
-      const data = await res.json();
-      if (res.ok) {
-        setOrders((prev) =>
-          prev.map((o) => (o.orderNumber === orderNumber ? { ...o, status: newStatus } : o))
-        );
-        toast.success(`Order #${orderNumber} updated to ${newStatus}`);
-      } else {
-        toast.error(data.error || 'Failed to update status');
-      }
-    } catch {
-      toast.error('Network error updating order status');
-    } finally {
-      setUpdatingId(null);
-    }
+  const paymentLabel = (o: AdminOrderRow) => {
+    if (o.paymentStatus === 'PAID') return { text: 'Paid', cls: 'bg-green-100 text-green-800' };
+    if (o.paymentStatus === 'REFUNDED') return { text: 'Refunded', cls: 'bg-gray-200 text-gray-800' };
+    if (o.paymentStatus === 'FAILED') return { text: 'Payment failed', cls: 'bg-red-100 text-red-800' };
+    if (o.paymentMethod.toUpperCase() === 'COD') return { text: 'Pay on delivery', cls: 'bg-cyan-100 text-cyan-800' };
+    return { text: 'Awaiting payment', cls: 'bg-yellow-100 text-yellow-800' };
   };
 
   // Filtered orders
@@ -183,7 +163,7 @@ export function AdminOrdersClient({ initialOrders }: { initialOrders: AdminOrder
             <option value="PROCESSING">Processing</option>
             <option value="SHIPPED">Shipped</option>
             <option value="DELIVERED">Delivered</option>
-            <option value="PENDING">Pending</option>
+            <option value="PENDING">Awaiting payment</option>
             <option value="CANCELLED">Cancelled</option>
           </select>
 
@@ -396,49 +376,37 @@ export function AdminOrdersClient({ initialOrders }: { initialOrders: AdminOrder
                           {order.paymentMethod.toUpperCase() === 'COD' ? 'Cash On Delivery' : 'Online / Cards'}
                         </span>
                         <div>
-                          <span
-                            className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${
-                              order.paymentStatus === 'PAID'
-                                ? 'bg-green-100 text-green-800'
-                                : 'bg-yellow-100 text-yellow-800'
-                            }`}
-                          >
-                            ● {order.paymentStatus}
+                          <span className={`inline-block px-1.5 py-0.2 rounded text-[9px] font-bold uppercase ${paymentLabel(order).cls}`}>
+                            ● {paymentLabel(order).text}
                           </span>
+                          {order.reviewFlags && order.reviewFlags.length > 0 && (
+                            <span className="inline-block ml-1 px-1.5 py-0.2 rounded text-[9px] font-bold uppercase bg-red-600 text-white" title="Open this order: something needs your attention">
+                              ⚠ Needs attention
+                            </span>
+                          )}
                         </div>
                       </div>
                     </td>
 
                     {/* 9. Order Status */}
                     <td className="py-4 px-4 whitespace-nowrap">
-                      <div className="relative inline-block">
-                        <select
-                          value={order.status}
-                          disabled={updatingId === order.orderNumber}
-                          onChange={(e) => handleQuickStatusChange(order.orderNumber, e.target.value)}
-                          className={`text-[10px] font-bold uppercase py-1 px-2 rounded border appearance-none pr-5 cursor-pointer outline-none transition-colors ${
-                            order.status === 'DELIVERED'
-                              ? 'bg-green-100 text-green-800 border-green-300'
-                              : order.status === 'SHIPPED'
-                              ? 'bg-blue-100 text-blue-800 border-blue-300'
-                              : order.status === 'PROCESSING'
-                              ? 'bg-purple-100 text-purple-800 border-purple-300'
-                              : order.status === 'CONFIRMED'
-                              ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
-                              : order.status === 'CANCELLED'
-                              ? 'bg-red-100 text-red-800 border-red-300'
-                              : 'bg-yellow-100 text-yellow-800 border-yellow-300'
-                          }`}
-                        >
-                          <option value="CONFIRMED">CONFIRMED</option>
-                          <option value="PROCESSING">PROCESSING</option>
-                          <option value="SHIPPED">SHIPPED</option>
-                          <option value="DELIVERED">DELIVERED</option>
-                          <option value="PENDING">PENDING</option>
-                          <option value="CANCELLED">CANCELLED</option>
-                        </select>
-                        <ChevronDown className="w-3 h-3 absolute right-1.5 top-1/2 -translate-y-1/2 pointer-events-none opacity-60" />
-                      </div>
+                      <span
+                        className={`inline-block text-[10px] font-bold uppercase py-1 px-2 rounded border ${
+                          order.status === 'DELIVERED'
+                            ? 'bg-green-100 text-green-800 border-green-300'
+                            : order.status === 'SHIPPED'
+                            ? 'bg-blue-100 text-blue-800 border-blue-300'
+                            : order.status === 'PROCESSING'
+                            ? 'bg-purple-100 text-purple-800 border-purple-300'
+                            : order.status === 'CONFIRMED'
+                            ? 'bg-emerald-100 text-emerald-800 border-emerald-300'
+                            : order.status === 'CANCELLED'
+                            ? 'bg-red-100 text-red-800 border-red-300'
+                            : 'bg-yellow-100 text-yellow-800 border-yellow-300'
+                        }`}
+                      >
+                        {order.status === 'PENDING' ? 'Awaiting payment' : order.status}
+                      </span>
                     </td>
 
                     {/* 10. Action */}

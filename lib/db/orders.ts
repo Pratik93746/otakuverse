@@ -305,11 +305,13 @@ export async function transitionOrderStatus(
   from: OrderStatus,
   to: OrderStatus,
   by: string,
-  extra: { tracking?: OrderTracking; note?: string } = {}
+  extra: { tracking?: OrderTracking; note?: string; markPaid?: boolean } = {}
 ): Promise<DbOrder | null> {
   const col = await getOrdersCollection();
   const now = new Date();
   const set: Record<string, unknown> = { orderStatus: to, updatedAt: now };
+  // Cash on delivery: the cash is collected at the door, so delivered = paid.
+  if (extra.markPaid) { set['payment.paymentStatus'] = 'PAID'; set.paidAt = now; }
   if (extra.tracking) {
     if (extra.tracking.carrier !== undefined) set['tracking.carrier'] = extra.tracking.carrier;
     if (extra.tracking.trackingNumber !== undefined) set['tracking.trackingNumber'] = extra.tracking.trackingNumber;
