@@ -220,7 +220,7 @@ export async function getProductByIdOrSlug(idOrSlug: string): Promise<DbProduct 
     }
 
     // Try name match
-    prod = await col.findOne({ name: { $regex: `^${idOrSlug}$`, $options: 'i' } });
+    prod = await col.findOne({ name: { $regex: `^${idOrSlug.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, $options: 'i' } });
     if (prod) {
       return {
         ...prod,
@@ -234,6 +234,41 @@ export async function getProductByIdOrSlug(idOrSlug: string): Promise<DbProduct 
 
   const m = MOCK_PRODUCTS.find((p) => p.slug === idOrSlug || p.id === idOrSlug);
   return m ? ({ ...m, id: m.id || m.slug, _id: m.id as any, isPublished: true, createdAt: new Date(), updatedAt: new Date() } as any) : null;
+}
+
+/**
+ * Look up a product for checkout. Unlike getProductByIdOrSlug this never falls back to
+ * the static demo catalog and never matches by name: only products that really exist in
+ * the database, at their current database price, can be bought. A database outage
+ * throws (checkout fails) rather than silently selling at stale demo prices.
+ */
+export async function getPurchasableProduct(idOrSlug: unknown): Promise<DbProduct | null> {
+  if (typeof idOrSlug !== 'string' || !idOrSlug || idOrSlug.length > 200) return null;
+  const col = await getProductsCollection();
+  const prod =
+    (await col.findOne({ slug: idOrSlug })) ||
+    (ObjectId.isValid(idOrSlug) && idOrSlug.length === 24
+      ? await col.findOne({ _id: new ObjectId(idOrSlug) as any })
+      : null);
+  if (!prod) return null;
+  if (typeof prod.price !== 'number' || !Number.isFinite(prod.price) || prod.price <= 0) return null;
+  return { ...prod, id: prod._id?.toString() || prod.slug, _id: prod._id?.toString() };
+}
+
+/** Give stock back (order cancelled, or a multi-item COD order could not be fully reserved). */
+export async function incrementProductStock(idOrSlug: string, quantity: number): Promise<boolean> {
+  if (!idOrSlug || !(quantity > 0)) return false;
+  const col = await getProductsCollection();
+  const res = await col.updateOne(
+    {
+      $or: [
+        { slug: idOrSlug },
+        ...(ObjectId.isValid(idOrSlug) && idOrSlug.length === 24 ? [{ _id: new ObjectId(idOrSlug) }] : []),
+      ],
+    } as any,
+    { $inc: { stock: quantity }, $set: { isSoldOut: false, updatedAt: new Date() } }
+  );
+  return res.modifiedCount === 1;
 }
 
 export async function getAllProductsAdmin(): Promise<DbProduct[]> {

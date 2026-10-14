@@ -64,7 +64,16 @@ export async function upsertUser(
     updatedAt: now,
   };
 
-  await col.insertOne(newUser as any);
+  try {
+    await col.insertOne(newUser as any);
+  } catch (err: any) {
+    // Two first requests for the same new user raced; the other one created the profile.
+    if (err?.code === 11000) {
+      const winner = await col.findOne({ firebaseUid });
+      if (winner) return winner;
+    }
+    throw err;
+  }
   return newUser;
 }
 

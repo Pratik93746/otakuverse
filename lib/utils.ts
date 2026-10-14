@@ -34,7 +34,9 @@ export function truncate(str: string, length: number): string {
 
 export function generateOrderNumber(): string {
   const timestamp = Date.now().toString(36).toUpperCase();
-  const random = Math.random().toString(36).substring(2, 6).toUpperCase();
+  // Cryptographically random suffix (Web Crypto works in browser, Node and edge).
+  const bytes = globalThis.crypto.getRandomValues(new Uint8Array(6));
+  const random = Array.from(bytes, (b) => (b % 36).toString(36)).join('').toUpperCase();
   return `OTV-${timestamp}-${random}`;
 }
 

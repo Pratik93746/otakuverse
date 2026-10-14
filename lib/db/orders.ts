@@ -185,3 +185,47 @@ export async function flagOrderForReview(orderNumber: string, flag: OrderReviewF
   );
   console.error(JSON.stringify({ event: 'order.review_flag', orderNumber, flag, detail: detail || null }));
 }
+
+/** Attach the Razorpay order id to an order that is still awaiting payment. */
+export async function bindRazorpayOrder(orderNumber: string, razorpayOrderId: string): Promise<boolean> {
+  const col = await getOrdersCollection();
+  const res = await col.updateOne(
+    { orderNumber, 'payment.paymentMethod': 'RAZORPAY', 'payment.razorpayOrderId': null, orderStatus: 'PENDING' },
+    { $set: { 'payment.razorpayOrderId': razorpayOrderId, updatedAt: new Date() } }
+  );
+  return res.modifiedCount === 1;
+}
+
+/** Close an online order that never reached the gateway (no money taken, no stock held). */
+export async function markOrderAbandoned(orderNumber: string, note: string): Promise<void> {
+  const col = await getOrdersCollection();
+  const now = new Date();
+  await col.updateOne(
+    { orderNumber, orderStatus: 'PENDING', 'payment.paymentStatus': { $ne: 'PAID' } },
+    {
+      $set: { orderStatus: 'CANCELLED', 'payment.paymentStatus': 'FAILED', updatedAt: now },
+      $push: { statusHistory: { at: now, from: 'PENDING', to: 'CANCELLED', by: 'system:checkout', note } } as any,
+    }
+  );
+}
+
+export async function countOpenCodOrders(firebaseUid: string): Promise<number> {
+  const col = await getOrdersCollection();
+  return await col.countDocuments({
+    firebaseUid,
+    'payment.paymentMethod': 'COD',
+    orderStatus: { $in: ['CONFIRMED', 'PROCESSING', 'SHIPPED'] },
+  });
+}
+
+/** True if the customer already has a live (not cancelled/failed) order using this coupon. */
+export async function hasUsedCoupon(firebaseUid: string, couponCode: string): Promise<boolean> {
+  const col = await getOrdersCollection();
+  const n = await col.countDocuments({
+    firebaseUid,
+    couponCode,
+    orderStatus: { $ne: 'CANCELLED' },
+    'payment.paymentStatus': { $ne: 'FAILED' },
+  });
+  return n > 0;
+}
