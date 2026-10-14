@@ -1,5 +1,7 @@
 import { getCollection, ensureIndexes } from '@/lib/mongodb';
 import { DbOrder, OrderStatus, PaymentStatus, OrderTracking, OrderReviewFlag } from './types';
+import { incrementProductStock } from './products';
+import { isStockHeld } from '@/lib/orders/lifecycle';
 
 export async function getOrdersCollection() {
   await ensureIndexes();
@@ -196,17 +198,76 @@ export async function bindRazorpayOrder(orderNumber: string, razorpayOrderId: st
   return res.modifiedCount === 1;
 }
 
-/** Close an online order that never reached the gateway (no money taken, no stock held). */
+/**
+ * Give an order's stock back exactly once. Safe to call repeatedly or concurrently:
+ * the first caller claims it (stockRestoredAt), everyone else gets false.
+ */
+export async function restockOrderOnce(order: DbOrder): Promise<boolean> {
+  const col = await getOrdersCollection();
+  const claim = await col.updateOne(
+    { orderNumber: order.orderNumber, stockRestoredAt: null },
+    { $set: { stockRestoredAt: new Date(), stockHeld: false, updatedAt: new Date() } }
+  );
+  if (claim.modifiedCount !== 1) return false;
+  const failed: string[] = [];
+  for (const item of order.items || []) {
+    const id = item.productId || item.slug;
+    if (!id || !(await incrementProductStock(id, item.quantity))) failed.push(`${id} x${item.quantity}`);
+  }
+  if (failed.length) await flagOrderForReview(order.orderNumber, 'STOCK_RESTORE_FAILED', failed.join(', '));
+  return true;
+}
+
+/** Close an online order that never reached the gateway (no money taken); returns its stock. */
 export async function markOrderAbandoned(orderNumber: string, note: string): Promise<void> {
   const col = await getOrdersCollection();
   const now = new Date();
-  await col.updateOne(
+  const before = await col.findOneAndUpdate(
     { orderNumber, orderStatus: 'PENDING', 'payment.paymentStatus': { $ne: 'PAID' } },
     {
       $set: { orderStatus: 'CANCELLED', 'payment.paymentStatus': 'FAILED', updatedAt: now },
       $push: { statusHistory: { at: now, from: 'PENDING', to: 'CANCELLED', by: 'system:checkout', note } } as any,
-    }
+    },
+    { returnDocument: 'before' }
   );
+  if (before && isStockHeld(before)) await restockOrderOnce(before);
+}
+
+/**
+ * Cancel unpaid online orders whose reservation time ran out and return their stock.
+ * Runs opportunistically (checkout, admin pages) and from the cron route. Idempotent and bounded.
+ * A payment that arrives after this point is flagged for refund, never silently fulfilled.
+ */
+export async function releaseExpiredReservations(limit = 50): Promise<number> {
+  const col = await getOrdersCollection();
+  const now = new Date();
+  const expired = await col
+    .find({
+      orderStatus: 'PENDING',
+      'payment.paymentMethod': 'RAZORPAY',
+      'payment.paymentStatus': { $in: ['PENDING', 'FAILED'] },
+      stockHeld: true,
+      reservationExpiresAt: { $lt: now },
+    })
+    .limit(limit)
+    .toArray();
+  let released = 0;
+  for (const o of expired) {
+    const before = await col.findOneAndUpdate(
+      { orderNumber: o.orderNumber, orderStatus: 'PENDING', 'payment.paymentStatus': { $in: ['PENDING', 'FAILED'] } },
+      {
+        $set: { orderStatus: 'CANCELLED', 'payment.paymentStatus': 'FAILED', updatedAt: now },
+        $push: { statusHistory: { at: now, from: 'PENDING', to: 'CANCELLED', by: 'system:expiry', note: 'payment not completed in time' } } as any,
+      },
+      { returnDocument: 'before' }
+    );
+    if (before) {
+      await restockOrderOnce(before);
+      released++;
+      console.log(JSON.stringify({ event: 'order.reservation_expired', orderNumber: o.orderNumber }));
+    }
+  }
+  return released;
 }
 
 export async function countOpenCodOrders(firebaseUid: string): Promise<number> {
@@ -228,4 +289,39 @@ export async function hasUsedCoupon(firebaseUid: string, couponCode: string): Pr
     'payment.paymentStatus': { $ne: 'FAILED' },
   });
   return n > 0;
+}
+
+export async function setStockHeld(orderNumber: string, held: boolean): Promise<void> {
+  const col = await getOrdersCollection();
+  await col.updateOne({ orderNumber }, { $set: { stockHeld: held, updatedAt: new Date() } });
+}
+
+/**
+ * Move an order from an expected status to a new one. Compare-and-set: if another request (or
+ * another admin tab) already changed the status, nothing is written and null is returned.
+ */
+export async function transitionOrderStatus(
+  orderNumber: string,
+  from: OrderStatus,
+  to: OrderStatus,
+  by: string,
+  extra: { tracking?: OrderTracking; note?: string } = {}
+): Promise<DbOrder | null> {
+  const col = await getOrdersCollection();
+  const now = new Date();
+  const set: Record<string, unknown> = { orderStatus: to, updatedAt: now };
+  if (extra.tracking) {
+    if (extra.tracking.carrier !== undefined) set['tracking.carrier'] = extra.tracking.carrier;
+    if (extra.tracking.trackingNumber !== undefined) set['tracking.trackingNumber'] = extra.tracking.trackingNumber;
+    if (extra.tracking.trackingUrl !== undefined) set['tracking.trackingUrl'] = extra.tracking.trackingUrl;
+    if (to === 'SHIPPED') set['tracking.shippedAt'] = now;
+  }
+  return await col.findOneAndUpdate(
+    { orderNumber, orderStatus: from },
+    {
+      $set: set,
+      $push: { statusHistory: { at: now, from, to, by, ...(extra.note ? { note: extra.note } : {}) } } as any,
+    },
+    { returnDocument: 'after' }
+  );
 }

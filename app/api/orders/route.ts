@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireFirebaseUser, handleAuthError } from '@/lib/firebase-admin';
 import { generateOrderNumber } from '@/lib/utils';
-import { createOrder, getUserOrders, bindRazorpayOrder, markOrderAbandoned, countOpenCodOrders, hasUsedCoupon } from '@/lib/db/orders';
+import { createOrder, getUserOrders, bindRazorpayOrder, markOrderAbandoned, countOpenCodOrders, hasUsedCoupon, releaseExpiredReservations } from '@/lib/db/orders';
 import { clearCart } from '@/lib/db/carts';
 import { saveAddress } from '@/lib/db/addresses';
 import { findUserByFirebaseUid, upsertUser } from '@/lib/db/users';
@@ -42,6 +42,8 @@ const MAX_LINES = 30;
 const MAX_QTY_PER_LINE = 20;
 /** Unfinished COD orders one account may hold at a time (limits fake-COD stock hoarding). */
 const MAX_OPEN_COD_ORDERS = 3;
+/** How long an unpaid online order keeps its stock reserved. */
+const RESERVATION_MINUTES = 30;
 
 const text = (v: unknown, max: number): string => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
@@ -210,16 +212,18 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Razorpay payment gateway is not configured. Please contact support.' }, { status: 500 });
     }
 
-    // COD: take the stock now, atomically, all-or-nothing.
-    if (paymentMethod === 'cod') {
-      const taken: OrderItem[] = [];
-      for (const item of verifiedItems) {
-        if (await decrementProductStock(item.productId, item.quantity)) {
-          taken.push(item);
-        } else {
-          for (const t of taken) await incrementProductStock(t.productId, t.quantity);
-          return NextResponse.json({ error: `"${item.name}" just sold out. Please update your cart.` }, { status: 409 });
-        }
+    // Give back stock held by unpaid online orders whose payment window has passed.
+    await releaseExpiredReservations().catch((e) => console.error('Reservation sweep failed:', e?.message));
+
+    // Take (reserve) the stock now, atomically and all-or-nothing, for COD and online orders alike.
+    // Payment later does NOT deduct again. Unpaid online reservations expire automatically.
+    const taken: OrderItem[] = [];
+    for (const item of verifiedItems) {
+      if (await decrementProductStock(item.productId, item.quantity)) {
+        taken.push(item);
+      } else {
+        for (const t of taken) await incrementProductStock(t.productId, t.quantity);
+        return NextResponse.json({ error: `"${item.name}" just sold out. Please update your cart.` }, { status: 409 });
       }
     }
 
@@ -244,32 +248,41 @@ export async function POST(request: NextRequest) {
     // Record the order before talking to the gateway, so a gateway order can never
     // exist without a matching order in our database.
     const now = new Date();
-    const order = await createOrder({
-      orderNumber,
-      firebaseUid: user.uid,
-      customer: { name, email, phone: orderPhone },
-      shippingAddress: shippingAddressSnapshot,
-      items: verifiedItems,
-      subtotal: serverSubtotal,
-      shipping,
-      tax,
-      discount: validDiscount,
-      total: serverTotal,
-      couponCode: appliedCoupon,
-      deliveryMethod: deliveryMethod === 'express' ? 'express' : 'standard',
-      orderStatus: paymentMethod === 'cod' ? 'CONFIRMED' : 'PENDING',
-      statusHistory: [{ at: now, from: null, to: paymentMethod === 'cod' ? 'CONFIRMED' : 'PENDING', by: 'system:checkout' }],
-      payment: {
-        paymentStatus: 'PENDING',
-        paymentId: null,
-        razorpayOrderId: null,
-        razorpaySignature: null,
-        paymentMethod: paymentMethod === 'cod' ? 'COD' : 'RAZORPAY',
-        amount: serverTotal,
-        currency: 'INR',
-        createdAt: now,
-      },
-    });
+    let order;
+    try {
+      order = await createOrder({
+        orderNumber,
+        firebaseUid: user.uid,
+        customer: { name, email, phone: orderPhone },
+        shippingAddress: shippingAddressSnapshot,
+        items: verifiedItems,
+        subtotal: serverSubtotal,
+        shipping,
+        tax,
+        discount: validDiscount,
+        total: serverTotal,
+        couponCode: appliedCoupon,
+        deliveryMethod: deliveryMethod === 'express' ? 'express' : 'standard',
+        orderStatus: paymentMethod === 'cod' ? 'CONFIRMED' : 'PENDING',
+        stockHeld: true,
+        reservationExpiresAt: paymentMethod === 'cod' ? null : new Date(now.getTime() + RESERVATION_MINUTES * 60_000),
+        statusHistory: [{ at: now, from: null, to: paymentMethod === 'cod' ? 'CONFIRMED' : 'PENDING', by: 'system:checkout' }],
+        payment: {
+          paymentStatus: 'PENDING',
+          paymentId: null,
+          razorpayOrderId: null,
+          razorpaySignature: null,
+          paymentMethod: paymentMethod === 'cod' ? 'COD' : 'RAZORPAY',
+          amount: serverTotal,
+          currency: 'INR',
+          createdAt: now,
+        },
+      });
+    } catch (dbErr) {
+      // The order could not be saved: give the reserved stock back before failing.
+      for (const t of taken) await incrementProductStock(t.productId, t.quantity).catch(() => false);
+      throw dbErr;
+    }
 
     let razorpayOrderId: string | null = null;
     if (rzp) {

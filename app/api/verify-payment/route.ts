@@ -58,6 +58,17 @@ export async function POST(request: NextRequest) {
         { status: 400 }
       );
     }
+    if (result.code === 'PROVIDER_UNAVAILABLE' || result.code === 'NOT_CAPTURED') {
+      // Money may have been taken. The Razorpay webhook will finish the order independently.
+      return NextResponse.json(
+        {
+          success: false,
+          pending: true,
+          error: 'We are still confirming your payment with the bank. Please do not pay again — your order will update shortly.',
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
       { success: false, error: 'This order can no longer be paid. If you were charged, our team will refund you — please contact support.' },
       { status: 409 }

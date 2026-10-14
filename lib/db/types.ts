@@ -111,6 +111,19 @@ export interface OrderPayment {
   amount: number;
   currency: string;
   createdAt: Date;
+  refund?: OrderRefund | null;
+  lastFailedPaymentId?: string | null;
+}
+
+export interface OrderRefund {
+  status: 'INITIATED' | 'PROCESSED' | 'FAILED';
+  amount: number;
+  razorpayRefundId?: string | null;
+  initiatedBy: string;
+  initiatedAt: Date;
+  /** Short lease so two clicks / two admins cannot start two refunds at once. */
+  lockedUntil?: Date | null;
+  error?: string | null;
 }
 
 export interface OrderTracking {
@@ -141,6 +154,10 @@ export interface DbOrder {
   reviewFlags?: OrderReviewFlag[];
   /** Append-only log of status changes and who made them. */
   statusHistory?: OrderStatusEvent[];
+  /** True while this order's stock is deducted from the product (reserved or sold). */
+  stockHeld?: boolean;
+  /** Unpaid online orders give their stock back automatically after this time. */
+  reservationExpiresAt?: Date | null;
   /** Set once stock for a cancelled order has been returned, so it is never returned twice. */
   stockRestoredAt?: Date | null;
   paidAt?: Date | null;
@@ -153,7 +170,9 @@ export type OrderReviewFlag =
   | 'AMOUNT_MISMATCH'
   | 'PAID_AFTER_CANCELLATION'
   | 'DUPLICATE_PAYMENT'
-  | 'REFUND_REQUIRED';
+  | 'REFUND_REQUIRED'
+  | 'STOCK_RESTORE_FAILED'
+  | 'RESERVATION_EXPIRED_PAYMENT';
 
 export interface OrderStatusEvent {
   at: Date;

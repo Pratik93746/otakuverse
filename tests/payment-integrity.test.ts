@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { existsSync } from 'node:fs';
 import { POST as verifyPayment } from '@/app/api/verify-payment/route';
 import { POST as webhook } from '@/app/api/webhooks/razorpay/route';
+import { makeFakeProvider } from './helpers/provider';
+import { __setPaymentProviderForTests } from '@/lib/payments/provider';
 import {
   resetDb, dropDbAndClose, seedOrder, seedProduct, getOrder, col,
   checkoutSignature, webhookSignature, jsonRequest, capturedEvent,
@@ -11,8 +13,9 @@ import {
 const sendWebhook = (raw: string, sig = webhookSignature(raw)) =>
   webhook(jsonRequest('/api/webhooks/razorpay', raw, { 'x-razorpay-signature': sig }));
 
-before(resetDb);
-beforeEach(resetDb);
+const fake = makeFakeProvider();
+before(async () => { __setPaymentProviderForTests(fake.provider); await resetDb(); });
+beforeEach(async () => { fake.reset(); await resetDb(); });
 after(dropDbAndClose);
 
 test('PAY-01: legacy /api/orders/verify-payment route no longer exists', () => {
@@ -52,6 +55,7 @@ test('non-string payment fields are rejected (no operator injection)', async () 
 test('INV-6: verify + webhook for the same payment decrement stock exactly once', async () => {
   const productId = await seedProduct({ slug: 'figure', price: 1000, stock: 5 });
   await seedOrder({ orderNumber: 'B1', total: 2000, items: [{ productId, name: 'figure', purchasePrice: 1000, quantity: 2, subtotal: 2000 }] });
+  fake.addPayment({ id: 'pay_B1', order_id: 'order_B1', amount: 200000 });
   const sig = checkoutSignature('order_B1', 'pay_B1');
   const raw = capturedEvent({ paymentId: 'pay_B1', orderId: 'order_B1', amountPaise: 200000 });
 
@@ -126,6 +130,7 @@ test('PAY-06/INV-10: payment.failed keeps the binding so a later successful retr
   assert.equal(order.payment.paymentStatus, 'FAILED');
   assert.equal(order.orderStatus, 'PENDING');
   assert.equal(order.payment.razorpayOrderId, 'order_RETRY');
+  fake.addPayment({ id: 'pay_ok', order_id: 'order_RETRY', amount: 50000 });
 
   const res = await verifyPayment(jsonRequest('/api/verify-payment', {
     order_id: 'order_RETRY', payment_id: 'pay_ok', razorpay_signature: checkoutSignature('order_RETRY', 'pay_ok'),
