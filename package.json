@@ -8,18 +8,12 @@
     "start": "next start",
     "lint": "next lint",
     "db:migrate": "ts-node --compiler-options '{\"module\":\"CommonJS\"}' scripts/migrate-to-mongodb.ts",
-    "preview": "opennextjs-cloudflare build && opennextjs-cloudflare preview",
-    "deploy": "opennextjs-cloudflare build && opennextjs-cloudflare deploy",
-    "upload": "opennextjs-cloudflare build && opennextjs-cloudflare upload",
-    "cf-typegen": "wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
     "test": "node --import tsx --import ./tests/setup.ts --test --test-concurrency=1 tests/*.test.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.9.1",
-    "@opennextjs/cloudflare": "^1.20.6",
     "@react-three/drei": "^10.7.8",
     "@react-three/fiber": "^9.7.0",
-    "@supabase/supabase-js": "^2.109.0",
     "@tanstack/react-query": "^5.102.8",
     "@types/bcryptjs": "^2.4.6",
     "@types/three": "^0.185.4",
@@ -60,7 +54,6 @@
     "tailwindcss": "^4",
     "ts-node": "^10.9.2",
     "tsx": "4.20.6",
-    "typescript": "^5",
-    "wrangler": "^4.128.0"
+    "typescript": "^5"
   }
 }
