@@ -30,6 +30,8 @@ export interface DbProduct {
   categorySlug?: string;
   stock: number;
   isSoldOut?: boolean;
+  /** false = hidden from the storefront and not purchasable. Absent = published. */
+  isPublished?: boolean;
   isNewArrival?: boolean;
   isBestSeller?: boolean;
   isLimitedEdition?: boolean;
