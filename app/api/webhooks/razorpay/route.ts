@@ -19,9 +19,9 @@ export async function POST(request: NextRequest) {
     const rawBody = await request.text();
     const signature = request.headers.get('x-razorpay-signature');
 
-    // RAZORPAY_WEBHOOK_SECRET is the secret entered when registering the webhook in the
-    // Razorpay dashboard. The key-secret fallback is kept only for existing deployments.
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET;
+    // Webhooks use a distinct secret configured in the Razorpay dashboard. Never fall
+    // back to the merchant API key secret, even when the deployment is misconfigured.
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
     if (!signature) {
       console.error('❌ [Razorpay Webhook] Rejected: Missing x-razorpay-signature header');
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Webhook configuration error' }, { status: 500 });
     }
 
-    if (rawBody.length > MAX_BODY_BYTES || !signatureMatches(rawBody, signature, webhookSecret)) {
+    if (Buffer.byteLength(rawBody, 'utf8') > MAX_BODY_BYTES || !signatureMatches(rawBody, signature, webhookSecret)) {
       console.error('❌ [Razorpay Webhook] Rejected: Cryptographic signature mismatch');
       return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 400 });
     }

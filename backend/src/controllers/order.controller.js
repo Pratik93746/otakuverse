@@ -3,12 +3,20 @@ const { successResponse, errorResponse } = require('../utils/response');
 
 const createOrder = async (req, res, next) => {
   try {
-    const { items, shippingAddress, customer, couponCode, currency = 'INR', paymentMethod = 'RAZORPAY' } = req.body;
-    const userId = req.user ? req.user.uid : `guest_${Date.now()}`;
+    const { items, shippingAddress, customer, couponCode } = req.body;
+    const paymentMethod = String(req.body.paymentMethod || 'RAZORPAY').toUpperCase() === 'COD' ? 'COD' : 'RAZORPAY';
+    const currency = 'INR'; // Financial invariant: store currency is strictly INR
+    if (!req.user || !req.user.uid) return errorResponse(res, 'Unauthorized.', 401, 'AUTH_UNAUTHORIZED');
+    const userId = req.user.uid;
 
+    // Contact email comes from the verified Firebase token; the browser only supplies name and phone.
     const order = await orderService.createOrder(
       userId,
-      customer,
+      {
+        name: customer && typeof customer.name === 'string' ? customer.name.trim().slice(0, 100) : undefined,
+        phone: customer && typeof customer.phone === 'string' ? customer.phone.trim().slice(0, 20) : undefined,
+        email: req.user.email || '',
+      },
       items,
       shippingAddress,
       couponCode,

@@ -14,6 +14,13 @@ const startServer = async () => {
     logger.info(`CORS configured for frontend origin: ${env.CLIENT_URL}`);
   });
 
+  // Return stock held by unpaid online orders whose payment window has passed.
+  const orderService = require('./services/order.service');
+  const sweep = setInterval(() => {
+    orderService.releaseExpiredReservations(200).catch((e) => logger.error('Reservation sweep failed:', e));
+  }, 5 * 60 * 1000);
+  sweep.unref();
+
   // Graceful Shutdown Handlers (Section 36)
   const shutdown = async (signal) => {
     logger.info(`${signal} received. Initiating graceful shutdown...`);

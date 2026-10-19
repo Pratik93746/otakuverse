@@ -103,6 +103,10 @@ export const isValidLocation = (line1: string, city: string): boolean => {
   return (line1 || '').trim().length >= 5 && (city || '').trim().length >= 2;
 };
 
+function generateCheckoutKey(): string {
+  return `chk_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
 export default function CheckoutPage() {
   const [mounted, setMounted] = useState(false);
   const { data: session, status } = useSession();
@@ -146,9 +150,11 @@ export default function CheckoutPage() {
   const [couponCode, setCouponCode] = useState('');
   const [discount, setDiscount] = useState(0);
   const [couponLoading, setCouponLoading] = useState(false);
+  const [checkoutIdempotencyKey, setCheckoutIdempotencyKey] = useState('');
 
   useEffect(() => {
     setMounted(true);
+    setCheckoutIdempotencyKey(generateCheckoutKey());
   }, []);
 
   const subtotal = mounted ? getSubtotal() : 0;
@@ -417,7 +423,11 @@ export default function CheckoutPage() {
     try {
       const res = await fetchWithAuth('/api/orders', {
         method: 'POST',
+        headers: {
+          'Idempotency-Key': checkoutIdempotencyKey,
+        },
         body: JSON.stringify({
+          idempotencyKey: checkoutIdempotencyKey,
           items: items.map((i) => ({
             productId: i.productId,
             name: i.name,
@@ -448,6 +458,7 @@ export default function CheckoutPage() {
         clearCart();
         setOrderId(data.orderNumber);
         setStep(4);
+        setCheckoutIdempotencyKey(generateCheckoutKey());
         setLoading(false);
       } else if (paymentMethod === 'razorpay') {
         if (!data.razorpayOrderId) {
@@ -458,6 +469,7 @@ export default function CheckoutPage() {
         clearCart();
         setOrderId(data.orderNumber);
         setStep(4);
+        setCheckoutIdempotencyKey(generateCheckoutKey());
         setLoading(false);
       }
     } catch (err: any) {
@@ -470,11 +482,12 @@ export default function CheckoutPage() {
     razorpayOrderId: string;
     orderNumber: string;
     razorpayKeyId?: string;
+    total?: number;
   }) => {
     const launchModal = () => {
       const options = {
         key: orderData.razorpayKeyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '',
-        amount: Math.round(total * 100),
+        amount: Math.round((orderData.total ?? total) * 100),
         currency: 'INR',
         name: 'BAKA STYLE',
         description: `Anime Figures Order #${orderData.orderNumber}`,

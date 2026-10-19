@@ -7,4 +7,4 @@ process.env.RAZORPAY_KEY_SECRET = 'synthetic_key_secret_for_tests';
 process.env.RAZORPAY_WEBHOOK_SECRET = 'synthetic_webhook_secret_for_tests';
 process.env.NEXTAUTH_SECRET ||= 'test-only-nextauth-secret-0123456789abcdef';
 (process.env as any).NODE_ENV ||= 'test';
-process.env.MONGODB_MAX_POOL_SIZE = '1';
+// Removed MONGODB_MAX_POOL_SIZE = '1' to verify default pool (10) under concurrency

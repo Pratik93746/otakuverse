@@ -98,7 +98,7 @@ export async function GET(
     };
     return NextResponse.json(fallbackResult);
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : 'Pincode validation error';
-    return NextResponse.json({ valid: false, message: errorMsg }, { status: 500 });
+    console.error('Pincode validation error:', err);
+    return NextResponse.json({ valid: false, message: 'Pincode validation error' }, { status: 500 });
   }
 }

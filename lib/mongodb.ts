@@ -10,14 +10,9 @@ const isPlaceholder =
 
 export const isPlaceholderUri = isPlaceholder;
 
-const options = {
-  // Tests set 1: the local Mongo-wire test server is only per-document atomic on one connection.
-  maxPoolSize: Number(process.env.MONGODB_MAX_POOL_SIZE) || 10,
-  serverSelectionTimeoutMS: 5000,
-};
-
 let client: MongoClient | null = null;
 let clientPromise: Promise<MongoClient> | null = null;
+let currentClientUri = '';
 
 declare global {
   // eslint-disable-next-line no-var
@@ -41,27 +36,45 @@ function initMongoClient(): Promise<MongoClient> {
     throw new Error('MONGODB_URI is not configured with valid MongoDB Atlas credentials.');
   }
 
+  // If URI changed (e.g. during test setup dynamically swapping to MongoMemoryServer), reset client
+  if (currentClientUri !== currentUri) {
+    if (client) {
+      client.close().catch(() => {});
+    }
+    client = null;
+    clientPromise = null;
+    global._mongoClientPromise = undefined;
+    currentClientUri = currentUri;
+    indexesEnsured = false;
+  }
+
+  const currentOptions = {
+    maxPoolSize: Number(process.env.MONGODB_MAX_POOL_SIZE) || 10,
+    serverSelectionTimeoutMS: 5000,
+  };
+
   if (process.env.NODE_ENV === 'development') {
     if (!global._mongoClientPromise) {
-      client = new MongoClient(currentUri, options);
-      global._mongoClientPromise = client.connect();
+      client = new MongoClient(currentUri, currentOptions);
+      global._mongoClientPromise = client.connect().catch((err) => {
+        global._mongoClientPromise = undefined;
+        client = null;
+        throw err;
+      });
     }
     return global._mongoClientPromise;
   }
 
   if (!clientPromise) {
-    client = new MongoClient(currentUri, options);
-    clientPromise = client.connect();
+    client = new MongoClient(currentUri, currentOptions);
+    // Do not cache rejected promise forever on connection failure
+    clientPromise = client.connect().catch((err) => {
+      clientPromise = null;
+      client = null;
+      throw err;
+    });
   }
   return clientPromise;
-}
-
-if (!isPlaceholder && typeof window === 'undefined') {
-  try {
-    initMongoClient();
-  } catch {
-    // Handled during runtime calls
-  }
 }
 
 // MONGODB_DB_NAME lets tests and staging use an isolated database.
@@ -86,49 +99,79 @@ export async function getDatabase(dbName: string = DB_NAME): Promise<Db> {
  * Helper to get a typed collection
  */
 export async function getCollection<T extends Document>(
-  collectionName: 'users' | 'products' | 'carts' | 'orders' | 'addresses' | string
+  collectionName: 'users' | 'products' | 'carts' | 'orders' | 'addresses' | 'auditLog' | string
 ): Promise<Collection<T>> {
   const db = await getDatabase();
   return db.collection<T>(collectionName);
 }
 
 let indexesEnsured = false;
+let indexPromise: Promise<void> | null = null;
 
 /**
  * Ensure collection indexes as required by architectural specifications
  */
 export async function ensureIndexes(): Promise<void> {
   if (indexesEnsured || isPlaceholderUri) return;
-  try {
-    const db = await getDatabase();
+  if (indexPromise) return indexPromise;
 
-    // 1. users: unique index on firebaseUid
-    await db.collection('users').createIndex({ firebaseUid: 1 }, { unique: true });
+  indexPromise = (async () => {
+    try {
+      const db = await getDatabase();
 
-    // 2. products: slug (unique), categorySlug, animeSlug, brandName
-    await db.collection('products').createIndex({ slug: 1 }, { unique: true });
-    await db.collection('products').createIndex({ categorySlug: 1 });
-    await db.collection('products').createIndex({ animeSlug: 1 });
-    await db.collection('products').createIndex({ brandName: 1 });
+      await Promise.allSettled([
+        // 1. users: unique index on firebaseUid
+        db.collection('users').createIndex({ firebaseUid: 1 }, { unique: true }),
 
-    // 3. carts: unique index on firebaseUid
-    await db.collection('carts').createIndex({ firebaseUid: 1 }, { unique: true });
+        // 2. products: slug (unique), categorySlug, animeSlug, brandName
+        db.collection('products').createIndex({ slug: 1 }, { unique: true }),
+        db.collection('products').createIndex({ categorySlug: 1 }),
+        db.collection('products').createIndex({ animeSlug: 1 }),
+        db.collection('products').createIndex({ brandName: 1 }),
 
-    // 4. orders: orderNumber (unique), firebaseUid, createdAt, orderStatus, payment.paymentStatus
-    await db.collection('orders').createIndex({ orderNumber: 1 }, { unique: true });
-    await db.collection('orders').createIndex({ firebaseUid: 1 });
-    await db.collection('orders').createIndex({ createdAt: -1 });
-    await db.collection('orders').createIndex({ orderStatus: 1 });
-    await db.collection('orders').createIndex({ 'payment.paymentStatus': 1 });
+        // 3. carts: unique index on firebaseUid
+        db.collection('carts').createIndex({ firebaseUid: 1 }, { unique: true }),
 
-    // 5. addresses: firebaseUid
-    await db.collection('addresses').createIndex({ firebaseUid: 1 });
+        // 4. orders: orderNumber (unique), firebaseUid, createdAt, orderStatus, payment.paymentStatus, razorpayOrderId
+        db.collection('orders').createIndex({ orderNumber: 1 }, { unique: true }),
+        db.collection('orders').createIndex({ firebaseUid: 1 }),
+        db.collection('orders').createIndex({ createdAt: -1 }),
+        db.collection('orders').createIndex({ orderStatus: 1 }),
+        db.collection('orders').createIndex({ 'payment.paymentStatus': 1 }),
+        db.collection('orders').createIndex(
+          { 'payment.razorpayOrderId': 1 },
+          { unique: true, partialFilterExpression: { 'payment.razorpayOrderId': { $type: 'string' } } }
+        ),
+        db.collection('orders').createIndex({ orderStatus: 1, stockHeld: 1, reservationExpiresAt: 1 }),
+        db.collection('orders').createIndex(
+          { firebaseUid: 1, idempotencyKey: 1 },
+          { unique: true, partialFilterExpression: { idempotencyKey: { $type: 'string' } } }
+        ),
 
-    indexesEnsured = true;
-    console.log('✅ [MongoDB] Collection indexes successfully ensured');
-  } catch (err) {
-    console.warn('⚠️ [MongoDB] Index creation notice:', (err as Error)?.message || err);
-  }
+        // Once-per-customer coupons: the database itself refuses a second live order with the same coupon.
+        db.collection('orders').createIndex(
+          { firebaseUid: 1, couponOnceKey: 1 },
+          { unique: true, partialFilterExpression: { couponOnceKey: { $type: 'string' } } }
+        ),
+
+        // 5. addresses: firebaseUid
+        db.collection('addresses').createIndex({ firebaseUid: 1 }),
+
+        // 6. auditLog: target and actor timelines
+        db.collection('auditLog').createIndex({ target: 1, at: -1 }),
+        db.collection('auditLog').createIndex({ actor: 1, at: -1 }),
+      ]);
+
+      indexesEnsured = true;
+    } catch (err) {
+      console.warn('⚠️ [MongoDB] Index creation notice:', (err as Error)?.message || err);
+      indexesEnsured = true;
+    } finally {
+      indexPromise = null;
+    }
+  })();
+
+  return indexPromise;
 }
 
 export default clientPromise;

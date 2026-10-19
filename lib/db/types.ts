@@ -145,6 +145,8 @@ export interface DbOrder {
   tax: number;
   discount: number;
   total: number;
+  /** Set only for once-per-customer coupons. A unique index (firebaseUid + this) makes the claim atomic; cleared when the order is cancelled. */
+  couponOnceKey?: string | null;
   couponCode?: string | null;
   deliveryMethod: string;
   orderStatus: OrderStatus;
@@ -161,6 +163,8 @@ export interface DbOrder {
   /** Set once stock for a cancelled order has been returned, so it is never returned twice. */
   stockRestoredAt?: Date | null;
   paidAt?: Date | null;
+  /** Client or network retry idempotency token. */
+  idempotencyKey?: string | null;
   createdAt: Date;
   updatedAt: Date;
 }

@@ -5,8 +5,8 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "test": "node test/api.test.js && node test/security.test.js",
-    "test:security": "node test/security.test.js"
+    "test": "node test/api.test.js && node test/security.test.js && node test/orders.test.js",
+    "test:security": "node test/security.test.js && node test/orders.test.js"
   },
   "keywords": [
     "express",

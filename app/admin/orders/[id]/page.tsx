@@ -1,4 +1,5 @@
 import { getServerSession } from 'next-auth';
+import { authenticateAdminSession } from '@/lib/admin-auth';
 import { notFound } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { getOrderByNumber } from '@/lib/db/orders';
@@ -30,7 +31,7 @@ export default async function AdminOrderDetailPage(props: {
 }) {
   const session = await getServerSession(authOptions);
 
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || !(await authenticateAdminSession())) {
     return <AdminAuthGate currentSession={session} callbackUrl="/admin/orders" pageTitle="Order Fulfillment Details" />;
   }
 

@@ -8,14 +8,18 @@ const Cart = require('../models/Cart');
 const { successResponse, errorResponse } = require('../utils/response');
 const { getPagination, formatPagination } = require('../utils/pagination');
 
+/** Structured audit line for every privileged change: who did what to which record. */
+const audit = (req, action, target, detail = {}) =>
+  console.log(JSON.stringify({ event: 'admin.audit', actor: (req.user && (req.user.email || req.user.uid)) || 'unknown', action, target, detail, at: new Date().toISOString() }));
+
 // Products Management
 const getProducts = async (req, res, next) => {
   try {
     const { page, limit, skip } = getPagination(req.query, 20, 50);
     const filter = {};
 
-    if (req.query.search) {
-      const s = req.query.search.trim();
+    if (typeof req.query.search === 'string' && req.query.search.trim()) {
+      const s = req.query.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
         { name: { $regex: s, $options: 'i' } },
         { slug: { $regex: s, $options: 'i' } },
@@ -37,6 +41,7 @@ const getProducts = async (req, res, next) => {
 const createProduct = async (req, res, next) => {
   try {
     const product = await productService.createProduct(req.body);
+    audit(req, 'product.create', product.slug, { price: product.price });
     return successResponse(res, product, 201);
   } catch (error) {
     next(error);
@@ -49,6 +54,7 @@ const updateProduct = async (req, res, next) => {
     if (!product) {
       return errorResponse(res, 'Product not found.', 404, 'PRODUCT_NOT_FOUND');
     }
+    audit(req, 'product.update', req.params.id, { fields: Object.keys(req.body || {}).slice(0, 20) });
     return successResponse(res, product, 200);
   } catch (error) {
     next(error);
@@ -61,6 +67,7 @@ const deleteProduct = async (req, res, next) => {
     if (!success) {
       return errorResponse(res, 'Product not found.', 404, 'PRODUCT_NOT_FOUND');
     }
+    audit(req, 'product.delete', req.params.id);
     return successResponse(res, { message: 'Product permanently removed from catalog and storage.' }, 200);
   } catch (error) {
     next(error);
@@ -100,6 +107,7 @@ const updateOrderStatus = async (req, res, next) => {
     if (!order) {
       return errorResponse(res, 'Order not found.', 404, 'ORDER_NOT_FOUND');
     }
+    audit(req, 'order.status', req.params.id, { to: status });
     return successResponse(res, order, 200);
   } catch (error) {
     next(error);

@@ -40,9 +40,29 @@ export async function getUserOrders(firebaseUid: string): Promise<DbOrder[]> {
   return await col.find({ firebaseUid }).sort({ createdAt: -1 }).toArray();
 }
 
-export async function getAllOrders(): Promise<DbOrder[]> {
+export async function getOrderByCustomerAndIdempotencyKey(
+  firebaseUid: string,
+  idempotencyKey: string
+): Promise<DbOrder | null> {
+  if (!firebaseUid || !idempotencyKey) return null;
   const col = await getOrdersCollection();
-  return await col.find({}).sort({ createdAt: -1 }).toArray();
+  return await col.findOne({ firebaseUid, idempotencyKey });
+}
+
+export async function getAllOrders(options?: { limit?: number; skip?: number; status?: string }): Promise<DbOrder[]> {
+  const col = await getOrdersCollection();
+  const filter: any = {};
+  if (options?.status) {
+    filter.orderStatus = options.status;
+  }
+  let cursor = col.find(filter).sort({ createdAt: -1 });
+  if (typeof options?.skip === 'number' && options.skip > 0) {
+    cursor = cursor.skip(options.skip);
+  }
+  if (typeof options?.limit === 'number' && options.limit > 0) {
+    cursor = cursor.limit(Math.min(100, options.limit));
+  }
+  return await cursor.toArray();
 }
 
 export async function updateOrderStatus(
@@ -225,7 +245,7 @@ export async function markOrderAbandoned(orderNumber: string, note: string): Pro
   const before = await col.findOneAndUpdate(
     { orderNumber, orderStatus: 'PENDING', 'payment.paymentStatus': { $ne: 'PAID' } },
     {
-      $set: { orderStatus: 'CANCELLED', 'payment.paymentStatus': 'FAILED', updatedAt: now },
+      $set: { orderStatus: 'CANCELLED', 'payment.paymentStatus': 'FAILED', couponOnceKey: null, updatedAt: now },
       $push: { statusHistory: { at: now, from: 'PENDING', to: 'CANCELLED', by: 'system:checkout', note } } as any,
     },
     { returnDocument: 'before' }
@@ -256,7 +276,7 @@ export async function releaseExpiredReservations(limit = 50): Promise<number> {
     const before = await col.findOneAndUpdate(
       { orderNumber: o.orderNumber, orderStatus: 'PENDING', 'payment.paymentStatus': { $in: ['PENDING', 'FAILED'] } },
       {
-        $set: { orderStatus: 'CANCELLED', 'payment.paymentStatus': 'FAILED', updatedAt: now },
+        $set: { orderStatus: 'CANCELLED', 'payment.paymentStatus': 'FAILED', couponOnceKey: null, updatedAt: now },
         $push: { statusHistory: { at: now, from: 'PENDING', to: 'CANCELLED', by: 'system:expiry', note: 'payment not completed in time' } } as any,
       },
       { returnDocument: 'before' }
@@ -279,14 +299,27 @@ export async function countOpenCodOrders(firebaseUid: string): Promise<number> {
   });
 }
 
+/** Unpaid online orders currently holding stock for this customer. */
+export async function countPendingOnlineOrders(firebaseUid: string): Promise<number> {
+  const col = await getOrdersCollection();
+  return await col.countDocuments({
+    firebaseUid,
+    'payment.paymentMethod': 'RAZORPAY',
+    orderStatus: 'PENDING',
+    stockHeld: true,
+  });
+}
+
 /** True if the customer already has a live (not cancelled/failed) order using this coupon. */
 export async function hasUsedCoupon(firebaseUid: string, couponCode: string): Promise<boolean> {
   const col = await getOrdersCollection();
   const n = await col.countDocuments({
     firebaseUid,
-    couponCode,
     orderStatus: { $ne: 'CANCELLED' },
-    'payment.paymentStatus': { $ne: 'FAILED' },
+    $or: [
+      { couponCode, 'payment.paymentStatus': { $ne: 'FAILED' } },
+      { couponOnceKey: couponCode },
+    ],
   });
   return n > 0;
 }
@@ -310,6 +343,7 @@ export async function transitionOrderStatus(
   const col = await getOrdersCollection();
   const now = new Date();
   const set: Record<string, unknown> = { orderStatus: to, updatedAt: now };
+  if (to === 'CANCELLED') set.couponOnceKey = null;
   // Cash on delivery: the cash is collected at the door, so delivered = paid.
   if (extra.markPaid) { set['payment.paymentStatus'] = 'PAID'; set.paidAt = now; }
   if (extra.tracking) {

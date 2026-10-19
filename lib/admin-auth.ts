@@ -27,6 +27,14 @@ export async function authenticateAdmin(request: NextRequest): Promise<AdminActo
     }
   }
 
+  return authenticateAdminSession();
+}
+
+/**
+ * Same re-verification as the API, for server-rendered admin pages: the role stored in the login
+ * cookie is never trusted on its own (it can be up to 7 days old).
+ */
+export async function authenticateAdminSession(): Promise<AdminActor | null> {
   try {
     const session = await getServerSession(authOptions);
     if (session?.user) {

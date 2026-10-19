@@ -59,9 +59,12 @@ class UserService {
    */
   async updateProfile(authProviderId, updateData) {
     const allowedUpdates = {};
-    if (updateData.name) allowedUpdates.name = updateData.name.trim();
-    if (updateData.phone !== undefined) allowedUpdates.phone = updateData.phone.trim();
-    if (updateData.avatar) allowedUpdates.avatar = updateData.avatar.trim();
+    if (typeof updateData.name === 'string' && updateData.name.trim()) allowedUpdates.name = updateData.name.trim().slice(0, 100);
+    if (typeof updateData.phone === 'string') allowedUpdates.phone = updateData.phone.trim().slice(0, 20);
+    if (typeof updateData.avatar === 'string' && /^https?:\/\//i.test(updateData.avatar.trim())) {
+      allowedUpdates.avatar = updateData.avatar.trim().slice(0, 1000);
+    }
+    if (Object.keys(allowedUpdates).length === 0) return await User.findOne({ authProviderId }).lean();
 
     return await User.findOneAndUpdate(
       { authProviderId },
@@ -77,13 +80,31 @@ class UserService {
     const user = await User.findOne({ authProviderId });
     if (!user) throw new Error('User not found.');
 
-    if (addressData.isDefault) {
+    if (user.addresses.length >= 15) {
+      throw Object.assign(new Error('Maximum 15 saved addresses allowed. Please remove an old one.'), { statusCode: 400, code: 'ADDRESS_LIMIT' });
+    }
+
+    // Copy only known fields: the request body is never pushed into the document as-is.
+    const t = (v, max) => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+    const clean = {
+      fullName: t(addressData.fullName, 100),
+      phone: t(addressData.phone, 20),
+      addressLine1: t(addressData.addressLine1, 200),
+      addressLine2: t(addressData.addressLine2, 200),
+      city: t(addressData.city, 100),
+      state: t(addressData.state, 100),
+      pinCode: t(addressData.pinCode, 10).replace(/\D/g, ''),
+      country: t(addressData.country, 60) || 'India',
+      isDefault: addressData.isDefault === true,
+    };
+
+    if (clean.isDefault) {
       user.addresses.forEach((a) => {
         a.isDefault = false;
       });
     }
 
-    user.addresses.push(addressData);
+    user.addresses.push(clean);
     await user.save();
     return user.addresses;
   }
@@ -95,9 +116,11 @@ class UserService {
     const { page, limit, skip } = getPagination(queryParams, 20, 50);
 
     const filter = {};
-    if (queryParams.role) filter.role = queryParams.role;
-    if (queryParams.search) {
-      const s = queryParams.search.trim();
+    if (typeof queryParams.role === 'string' && ['USER', 'ADMIN'].includes(queryParams.role.toUpperCase())) {
+      filter.role = queryParams.role.toUpperCase();
+    }
+    if (typeof queryParams.search === 'string' && queryParams.search.trim()) {
+      const s = queryParams.search.trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
       filter.$or = [
         { email: { $regex: s, $options: 'i' } },
         { name: { $regex: s, $options: 'i' } },
@@ -119,7 +142,17 @@ class UserService {
    * Update user role (Admin)
    */
   async updateUserRole(userId, role) {
-    return await User.findByIdAndUpdate(userId, { $set: { role } }, { new: true }).lean();
+    if (typeof role !== 'string' || !['USER', 'ADMIN'].includes(role.toUpperCase())) {
+      const err = new Error('Invalid user role');
+      err.statusCode = 400;
+      throw err;
+    }
+    if (!require('mongoose').Types.ObjectId.isValid(userId)) {
+      const err = new Error('Invalid user id');
+      err.statusCode = 400;
+      throw err;
+    }
+    return await User.findByIdAndUpdate(userId, { $set: { role: role.toUpperCase() } }, { new: true, runValidators: true }).lean();
   }
 
   /**

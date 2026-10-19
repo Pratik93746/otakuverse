@@ -218,3 +218,28 @@ test('isPublished must be a boolean', async () => {
   assert.equal((await patch({ id: 'fig', isPublished: 'false' })).status, 400);
   assert.equal((await patch({ id: 'fig', isPublished: 0 })).status, 400);
 });
+
+test('SEC-RES: user address collection is capped at 15 addresses to prevent resource exhaustion', async () => {
+  const { POST: addressPost } = await import('@/app/api/addresses/route');
+  const baseAddr = {
+    fullName: 'Test Customer',
+    phone: '9876543210',
+    addressLine1: '123 MG Road Flat 4B',
+    city: 'Bengaluru',
+    state: 'Karnataka',
+    pinCode: '560001',
+    country: 'India',
+  };
+
+  for (let i = 1; i <= 15; i++) {
+    const res = await addressPost(jsonRequest('/api/addresses', { ...baseAddr, addressLine1: `123 MG Road Flat ${i}` }, bearer('tok-customer')));
+    assert.equal(res.status, 200, `Address ${i} should succeed`);
+  }
+
+  // 16th address must be rejected with 400
+  const res16 = await addressPost(jsonRequest('/api/addresses', { ...baseAddr, addressLine1: '123 MG Road Flat 16' }, bearer('tok-customer')));
+  assert.equal(res16.status, 400);
+  const data = await res16.json();
+  assert.match(data.error, /Maximum 15 saved addresses/);
+});
+

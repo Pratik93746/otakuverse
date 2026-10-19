@@ -10,8 +10,12 @@ const buckets = new Map<string, { count: number; resetAt: number }>();
 const MAX_KEYS = 5000;
 
 export function clientIp(request: NextRequest): string {
+  // Platform-set headers first: x-vercel-forwarded-for / x-real-ip cannot be forged by the client
+  // on Vercel, whereas the first x-forwarded-for entry can be on other hosts.
+  const platform = request.headers.get('x-vercel-forwarded-for') || request.headers.get('x-real-ip');
+  if (platform) return platform.split(',')[0].trim();
   const fwd = request.headers.get('x-forwarded-for');
-  return (fwd ? fwd.split(',')[0].trim() : request.headers.get('x-real-ip')) || 'unknown';
+  return (fwd ? fwd.split(',')[0].trim() : '') || 'unknown';
 }
 
 export function rateLimit(request: NextRequest, name: string, limit: number, windowMs = 60_000, now = Date.now()): { ok: boolean; retryAfter: number } {

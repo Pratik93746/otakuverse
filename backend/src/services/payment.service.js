@@ -34,17 +34,38 @@ class PaymentService {
    * Create Razorpay Order for a verified Order document
    */
   async createRazorpayOrder(orderId, userId) {
+    if (!mongoose.Types.ObjectId.isValid(orderId)) throw httpError('Invalid order id.', 400, 'ORDER_ID_INVALID');
     const order = await Order.findOne({ _id: orderId, userId });
     if (!order) {
-      throw new Error('Order not found or access denied.');
+      throw httpError('Order not found or access denied.', 404, 'ORDER_NOT_FOUND');
     }
 
     if (order.paymentStatus === 'PAID') {
-      throw new Error('This order has already been paid.');
+      throw httpError('This order has already been paid.', 409, 'ALREADY_PAID');
+    }
+    if (order.paymentMethod === 'COD') {
+      throw httpError('This is a cash-on-delivery order; no online payment is needed.', 409, 'NOT_ONLINE_ORDER');
+    }
+    if (order.orderStatus !== 'PENDING' || (order.reservationExpiresAt && order.reservationExpiresAt < new Date())) {
+      throw httpError('This order can no longer be paid. Please place a new order.', 409, 'ORDER_NOT_PAYABLE');
+    }
+
+    const amountInPaise = Math.round(order.totalAmount * 100);
+
+    // One gateway order per shop order: reuse it so a customer who is charged on an older gateway
+    // order can never be orphaned by a newer one overwriting the stored id.
+    if (order.razorpayOrderId) {
+      return {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        razorpayOrderId: order.razorpayOrderId,
+        amount: amountInPaise,
+        currency: order.currency || 'INR',
+        keyId: env.RAZORPAY_KEY_ID,
+      };
     }
 
     const rzp = this.getRazorpayInstance();
-    const amountInPaise = Math.round(order.totalAmount * 100);
 
     const rzpOrder = await rzp.orders.create({
       amount: amountInPaise,
@@ -57,8 +78,22 @@ class PaymentService {
       },
     });
 
-    order.razorpayOrderId = rzpOrder.id;
-    await order.save();
+    const bound = await Order.updateOne(
+      { _id: order._id, razorpayOrderId: null, orderStatus: 'PENDING' },
+      { $set: { razorpayOrderId: rzpOrder.id } }
+    );
+    if (bound.modifiedCount !== 1) {
+      // Another request bound a gateway order first; use that one.
+      const fresh = await Order.findById(order._id).lean();
+      return {
+        orderId: order._id,
+        orderNumber: order.orderNumber,
+        razorpayOrderId: fresh.razorpayOrderId,
+        amount: amountInPaise,
+        currency: order.currency || 'INR',
+        keyId: env.RAZORPAY_KEY_ID,
+      };
+    }
 
     return {
       orderId: order._id,
@@ -110,7 +145,7 @@ class PaymentService {
   /** Atomic transition PENDING -> PAID for exactly this gateway order. Returns the updated order or null. */
   async _claimPaid(razorpayOrderId, paymentId) {
     return Order.findOneAndUpdate(
-      { razorpayOrderId, paymentStatus: { $ne: 'PAID' }, orderStatus: 'PENDING' },
+      { razorpayOrderId, paymentMethod: { $ne: 'COD' }, paymentStatus: { $ne: 'PAID' }, orderStatus: 'PENDING' },
       { $set: { paymentStatus: 'PAID', orderStatus: 'CONFIRMED', razorpayPaymentId: paymentId, paymentId } },
       { new: true }
     );
@@ -132,7 +167,10 @@ class PaymentService {
     });
 
     const shortfalls = [];
-    for (const item of order.items) {
+    // Stock was reserved when the order was created. Only legacy orders (no reservation) deduct now.
+    const itemsToDeduct = order.stockHeld ? [] : order.items;
+    if (!order.stockHeld) await Order.updateOne({ _id: order._id }, { $set: { stockHeld: true } });
+    for (const item of itemsToDeduct) {
       const query = {
         $or: [
           { slug: item.productId },

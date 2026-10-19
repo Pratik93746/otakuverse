@@ -1,7 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireFirebaseUser, handleAuthError } from '@/lib/firebase-admin';
+import { requireFirebaseUser } from '@/lib/firebase-admin';
 import { generateOrderNumber } from '@/lib/utils';
-import { createOrder, getUserOrders, bindRazorpayOrder, markOrderAbandoned, countOpenCodOrders, hasUsedCoupon, releaseExpiredReservations } from '@/lib/db/orders';
+import { rateLimit } from '@/lib/rate-limit';
+import { createOrder, getUserOrders, bindRazorpayOrder, markOrderAbandoned, countOpenCodOrders, countPendingOnlineOrders, hasUsedCoupon, releaseExpiredReservations, getOrderByCustomerAndIdempotencyKey } from '@/lib/db/orders';
 import { clearCart } from '@/lib/db/carts';
 import { saveAddress } from '@/lib/db/addresses';
 import { findUserByFirebaseUid, upsertUser } from '@/lib/db/users';
@@ -42,12 +43,18 @@ const MAX_LINES = 30;
 const MAX_QTY_PER_LINE = 20;
 /** Unfinished COD orders one account may hold at a time (limits fake-COD stock hoarding). */
 const MAX_OPEN_COD_ORDERS = 3;
+/** Unpaid online orders one account may hold at a time (each reserves stock for RESERVATION_MINUTES). */
+const MAX_PENDING_ONLINE_ORDERS = 5;
 /** How long an unpaid online order keeps its stock reserved. */
 const RESERVATION_MINUTES = 30;
 
 const text = (v: unknown, max: number): string => (typeof v === 'string' ? v.trim().slice(0, max) : '');
 
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'order-create', 15);
+  if (!limited.ok) {
+    return NextResponse.json({ error: 'Too many order attempts. Please wait a minute.' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } });
+  }
   try {
     const body = await request.json().catch(() => null);
     if (!body || typeof body !== 'object') {
@@ -62,6 +69,27 @@ export async function POST(request: NextRequest) {
     const user = await resolveUser(request);
     if (!user?.uid) {
       return NextResponse.json({ error: 'Please sign in to place an order' }, { status: 401 });
+    }
+
+    const rawIdempotency =
+      request.headers.get('idempotency-key') ||
+      request.headers.get('x-idempotency-key') ||
+      (typeof body.idempotencyKey === 'string' ? body.idempotencyKey : null);
+    const idempotencyKey = rawIdempotency ? rawIdempotency.trim().slice(0, 128) : null;
+
+    if (idempotencyKey) {
+      const existing = await getOrderByCustomerAndIdempotencyKey(user.uid, idempotencyKey);
+      if (existing && existing.orderStatus !== 'CANCELLED') {
+        const { key_id: razorpayKeyId } = getRazorpayCredentials();
+        return NextResponse.json({
+          orderNumber: existing.orderNumber,
+          orderId: existing._id?.toString() || existing.orderNumber,
+          razorpayOrderId: existing.payment?.razorpayOrderId || null,
+          razorpayKeyId,
+          total: existing.total,
+          idempotentReplay: true,
+        });
+      }
     }
 
     if (!Array.isArray(items) || items.length === 0) {
@@ -206,6 +234,14 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    // Stops one account from locking up the whole catalogue with unpaid reservations.
+    if (paymentMethod === 'razorpay' && (await countPendingOnlineOrders(user.uid)) >= MAX_PENDING_ONLINE_ORDERS) {
+      return NextResponse.json(
+        { error: 'You have several unpaid orders waiting for payment. Please complete or wait for them to expire before placing another.' },
+        { status: 429 }
+      );
+    }
+
     const { key_id: razorpayKeyId } = getRazorpayCredentials();
     const rzp = paymentMethod === 'razorpay' ? getRazorpayClient() : null;
     if (paymentMethod === 'razorpay' && !rzp) {
@@ -262,11 +298,13 @@ export async function POST(request: NextRequest) {
         discount: validDiscount,
         total: serverTotal,
         couponCode: appliedCoupon,
+        couponOnceKey: appliedCoupon && ACTIVE_COUPONS[appliedCoupon]?.oncePerCustomer ? appliedCoupon : null,
         deliveryMethod: deliveryMethod === 'express' ? 'express' : 'standard',
         orderStatus: paymentMethod === 'cod' ? 'CONFIRMED' : 'PENDING',
         stockHeld: true,
         reservationExpiresAt: paymentMethod === 'cod' ? null : new Date(now.getTime() + RESERVATION_MINUTES * 60_000),
         statusHistory: [{ at: now, from: null, to: paymentMethod === 'cod' ? 'CONFIRMED' : 'PENDING', by: 'system:checkout' }],
+        idempotencyKey: idempotencyKey || null,
         payment: {
           paymentStatus: 'PENDING',
           paymentId: null,
@@ -281,6 +319,10 @@ export async function POST(request: NextRequest) {
     } catch (dbErr) {
       // The order could not be saved: give the reserved stock back before failing.
       for (const t of taken) await incrementProductStock(t.productId, t.quantity).catch(() => false);
+      // Lost the race for a once-per-customer coupon: the unique index refused the second order.
+      if ((dbErr as any)?.code === 11000 && (dbErr as any)?.keyPattern?.couponOnceKey) {
+        return NextResponse.json({ error: `Coupon ${appliedCoupon} can only be used once per customer` }, { status: 400 });
+      }
       throw dbErr;
     }
 

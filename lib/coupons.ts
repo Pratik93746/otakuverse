@@ -6,6 +6,8 @@ export interface CouponDefinition {
   minOrder?: number;
   /** One use per customer (welcome / first-order offers). Enforced at order creation. */
   oncePerCustomer?: boolean;
+  /** Optional expiration timestamp. */
+  expiresAt?: Date | string;
 }
 
 export const ACTIVE_COUPONS: Record<string, CouponDefinition> = {
@@ -33,6 +35,10 @@ export function calculateCouponDiscount(code: string | undefined | null, orderTo
 
   if (!coupon) {
     return { valid: false, discount: 0, reason: 'Invalid or expired coupon code' };
+  }
+
+  if (coupon.expiresAt && new Date(coupon.expiresAt).getTime() < Date.now()) {
+    return { valid: false, discount: 0, reason: `Coupon ${clean} has expired` };
   }
 
   if (coupon.minOrder && orderTotal < coupon.minOrder) {

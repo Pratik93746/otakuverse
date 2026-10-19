@@ -3,6 +3,44 @@ const Product = require('../models/Product');
 const { getPagination, formatPagination } = require('../utils/pagination');
 const { sanitizeString } = require('../validators/product.validator');
 
+const TEXT_FIELDS = ['name', 'description', 'shortDescription', 'categoryName', 'categorySlug', 'brand', 'brandName', 'characterName', 'animeName', 'animeSlug', 'image', 'thumbnail', 'sku'];
+const BOOL_FIELDS = ['isActive', 'isFeatured', 'isNewArrival', 'isBestSeller', 'isLimitedEdition', 'isPreOrder'];
+const validationError = (message) => Object.assign(new Error(message), { statusCode: 400, code: 'VALIDATION_ERROR' });
+
+/** The only fields an admin may set through the API; everything else (e.g. _id, rating) is dropped. */
+function pickProductFields(input) {
+  const out = {};
+  if (!input || typeof input !== 'object') return out;
+  for (const k of TEXT_FIELDS) {
+    if (typeof input[k] === 'string') out[k] = input[k].trim().slice(0, k === 'description' ? 5000 : 500);
+  }
+  for (const k of BOOL_FIELDS) {
+    if (typeof input[k] === 'boolean') out[k] = input[k];
+  }
+  for (const k of ['price', 'compareAtPrice']) {
+    if (input[k] !== undefined && input[k] !== null) {
+      const n = Number(input[k]);
+      if (!Number.isFinite(n) || n < 0 || n > 1000000) throw validationError(`${k} must be a number between 0 and 1,000,000.`);
+      out[k] = Math.round(n * 100) / 100;
+    }
+  }
+  if (input.stock !== undefined) {
+    const n = Number(input.stock);
+    if (!Number.isInteger(n) || n < 0 || n > 100000) throw validationError('stock must be a whole number between 0 and 100,000.');
+    out.stock = n;
+    out.isSoldOut = n <= 0;
+  }
+  if (Array.isArray(input.images)) {
+    out.images = input.images.slice(0, 12).map((i) => {
+      if (typeof i === 'string') return { url: i.trim().slice(0, 1000) };
+      if (i && typeof i.url === 'string') return { url: i.url.trim().slice(0, 1000), alt: typeof i.alt === 'string' ? i.alt.slice(0, 200) : undefined, isMain: !!i.isMain };
+      return null;
+    }).filter(Boolean);
+  }
+  if (Array.isArray(input.tags)) out.tags = input.tags.filter((t) => typeof t === 'string').slice(0, 20).map((t) => t.trim().slice(0, 50));
+  return out;
+}
+
 class ProductService {
   /**
    * Optimized paginated product catalog query adhering to Section 13 & 16
@@ -189,9 +227,10 @@ class ProductService {
    * Create new product (Admin)
    */
   async createProduct(productData) {
-    const slug = productData.slug
-      ? sanitizeString(productData.slug).toLowerCase()
-      : productData.name
+    const fields = pickProductFields(productData);
+    const slug = productData.slug && typeof productData.slug === 'string'
+      ? productData.slug.toLowerCase().trim().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+      : String(fields.name || '')
           .toLowerCase()
           .trim()
           .replace(/[^a-z0-9]+/g, '-')
@@ -201,7 +240,7 @@ class ProductService {
     const finalSlug = existing ? `${slug}-${Math.random().toString(36).substring(2, 6)}` : slug;
 
     const newProduct = new Product({
-      ...productData,
+      ...fields,
       _id: new mongoose.Types.ObjectId().toString(),
       slug: finalSlug,
       isActive: true,
@@ -214,14 +253,10 @@ class ProductService {
    * Update product (Admin)
    */
   async updateProduct(id, updateData) {
+    if (typeof id !== 'string' || id.length > 200) return null;
     const query = { $or: [{ _id: id }, { slug: id }] };
-    const sanitized = { ...updateData };
-    delete sanitized._id;
-
-    if (sanitized.stock !== undefined) {
-      sanitized.stock = Number(sanitized.stock);
-      sanitized.isSoldOut = sanitized.stock <= 0;
-    }
+    const sanitized = pickProductFields(updateData);
+    if (Object.keys(sanitized).length === 0) throw validationError('No valid fields to update.');
 
     return await Product.findOneAndUpdate(query, { $set: sanitized }, { new: true, runValidators: true }).lean();
   }
@@ -230,6 +265,7 @@ class ProductService {
    * Permanently delete product from catalog and database to prevent storage bloat
    */
   async deleteProduct(id) {
+    if (typeof id !== 'string' || id.length > 200) return false;
     const query = {
       $or: [
         { slug: id },

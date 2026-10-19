@@ -1,23 +1,71 @@
 import crypto from 'crypto';
+import net from 'net';
 import { NextRequest } from 'next/server';
 import { getDatabase, getMongoClient } from '@/lib/mongodb';
 import { createOrder } from '@/lib/db/orders';
+import { __resetRateLimitsForTests } from '@/lib/rate-limit';
 import type { DbOrder } from '@/lib/db/types';
 
+let mongodInstance: any = null;
+
+function isPortOpen(host: string, port: number): Promise<boolean> {
+  return new Promise((resolve) => {
+    const socket = new net.Socket();
+    socket.setTimeout(600);
+    socket.once('connect', () => {
+      socket.destroy();
+      resolve(true);
+    });
+    socket.once('timeout', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.once('error', () => {
+      socket.destroy();
+      resolve(false);
+    });
+    socket.connect(port, host);
+  });
+}
+
+export async function ensureTestMongo() {
+  if (process.env.MONGODB_URI && !process.env.MONGODB_URI.includes('127.0.0.1:27017') && !process.env.MONGODB_URI.includes('localhost:27017')) {
+    return;
+  }
+  const portOpen = await isPortOpen('127.0.0.1', 27017);
+  if (portOpen) {
+    return;
+  }
+  if (!mongodInstance) {
+    const { MongoMemoryServer } = await import('mongodb-memory-server');
+    mongodInstance = await MongoMemoryServer.create();
+    process.env.MONGODB_URI = mongodInstance.getUri();
+  }
+}
+
 export async function resetDb() {
+  __resetRateLimitsForTests();
+  await ensureTestMongo();
   const db = await getDatabase();
-  await Promise.all(['orders', 'products', 'users', 'carts', 'addresses'].map((c) => db.collection(c).deleteMany({})));
+  await Promise.all(['orders', 'products', 'users', 'carts', 'addresses', 'auditLog'].map((c) => db.collection(c).deleteMany({})));
 }
 
 export async function dropDbAndClose() {
-  const db = await getDatabase();
-  await db.dropDatabase().catch(() => {});
-  await (await getMongoClient()).close();
+  try {
+    const db = await getDatabase();
+    await db.dropDatabase().catch(() => {});
+    await (await getMongoClient()).close();
+  } catch {}
+  if (mongodInstance) {
+    await mongodInstance.stop().catch(() => {});
+    mongodInstance = null;
+  }
 }
 
 export const col = async (name: string) => (await getDatabase()).collection<any>(name);
 
 export async function seedProduct(p: { slug: string; price: number; stock: number; name?: string }) {
+  await ensureTestMongo();
   const c = await col('products');
   const now = new Date();
   const res = await c.insertOne({ name: p.name || p.slug, slug: p.slug, price: p.price, stock: p.stock, image: '/x.png', createdAt: now, updatedAt: now });
@@ -29,6 +77,7 @@ export async function seedOrder(o: {
   orderStatus?: DbOrder['orderStatus']; paymentStatus?: DbOrder['payment']['paymentStatus'];
   items?: DbOrder['items']; firebaseUid?: string;
 }) {
+  await ensureTestMongo();
   return createOrder({
     orderNumber: o.orderNumber,
     firebaseUid: o.firebaseUid || 'uid_customer_a',

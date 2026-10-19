@@ -1,12 +1,12 @@
 const env = require('./env');
 
+const isProd = env.NODE_ENV === 'production';
 const allowedOrigins = [
   env.CLIENT_URL,
-  'http://localhost:3000',
-  'http://127.0.0.1:3000',
-  'http://localhost:5000',
   'https://otakuverse.in',
-  'https://baka.style'
+  'https://baka.style',
+  // Local development origins are never trusted in production.
+  ...(isProd ? [] : ['http://localhost:3000', 'http://127.0.0.1:3000', 'http://localhost:5000']),
 ].filter(Boolean);
 
 const corsOptions = {
@@ -14,7 +14,7 @@ const corsOptions = {
     if (!origin || allowedOrigins.indexOf(origin) !== -1 || env.NODE_ENV === 'development' || env.NODE_ENV === 'test') {
       callback(null, true);
     } else {
-      callback(new Error(`CORS blocked request from unauthorized origin: ${origin}`));
+      callback(Object.assign(new Error('Origin not allowed.'), { statusCode: 403, code: 'CORS_BLOCKED' }));
     }
   },
   credentials: true,

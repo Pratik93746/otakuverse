@@ -140,3 +140,84 @@ test('500 responses do not leak internal error messages', async () => {
   const res = await createOrderRoute(jsonRequest('/api/orders', 'not json', { authorization: 'Bearer token-alice' }));
   assert.equal(res.status, 400);
 });
+
+test('ORD-IDEMP: duplicate submission with same idempotencyKey returns existing order and does not decrement stock twice', async () => {
+  await seedProduct({ slug: 'idemp-item', price: 1000, stock: 5 });
+  const key = 'idem_key_' + Date.now();
+  const req1 = await order({ items: [{ productId: 'idemp-item', quantity: 1 }], idempotencyKey: key });
+  assert.equal(req1.status, 200);
+  const body1 = await req1.json();
+  assert.ok(body1.orderNumber);
+  assert.equal(await stockOf('idemp-item'), 4);
+
+  // Replay with exact same idempotencyKey
+  const req2 = await order({ items: [{ productId: 'idemp-item', quantity: 1 }], idempotencyKey: key });
+  assert.equal(req2.status, 200);
+  const body2 = await req2.json();
+  assert.equal(body2.orderNumber, body1.orderNumber);
+  assert.equal(body2.idempotentReplay, true);
+  // Stock must still be 4, NOT 3
+  assert.equal(await stockOf('idemp-item'), 4);
+  assert.equal(await (await col('orders')).countDocuments({ orderNumber: body1.orderNumber }), 1);
+});
+
+test('INV-4: expired coupon is rejected or discounted to 0', async () => {
+  const { calculateCouponDiscount, ACTIVE_COUPONS } = await import('@/lib/coupons');
+  ACTIVE_COUPONS.EXPIRED_TEST = {
+    code: 'EXPIRED_TEST',
+    type: 'FIXED',
+    value: 500,
+    expiresAt: new Date(Date.now() - 100000),
+  };
+  ACTIVE_COUPONS.ACTIVE_TEST = {
+    code: 'ACTIVE_TEST',
+    type: 'FIXED',
+    value: 500,
+    expiresAt: new Date(Date.now() + 100000),
+  };
+
+  try {
+    const expiredResult = calculateCouponDiscount('EXPIRED_TEST', 2000);
+    assert.equal(expiredResult.valid, false);
+    assert.equal(expiredResult.discount, 0);
+    assert.match(expiredResult.reason || '', /expired/i);
+
+    const activeResult = calculateCouponDiscount('ACTIVE_TEST', 2000);
+    assert.equal(activeResult.valid, true);
+    assert.equal(activeResult.discount, 500);
+  } finally {
+    delete ACTIVE_COUPONS.EXPIRED_TEST;
+    delete ACTIVE_COUPONS.ACTIVE_TEST;
+  }
+});
+
+
+test('SEC-03: one account cannot hold unlimited unpaid online reservations', async () => {
+  await seedProduct({ slug: 'hoard', price: 500, stock: 100 });
+  const pending = Array.from({ length: 5 }, (_, i) => ({
+    orderNumber: `HOLD-${i}`, firebaseUid: 'alice', orderStatus: 'PENDING', stockHeld: true,
+    payment: { paymentMethod: 'RAZORPAY', paymentStatus: 'PENDING' },
+  }));
+  await (await col('orders')).insertMany(pending as any[]);
+  const res = await order({ paymentMethod: 'razorpay', items: [{ productId: 'hoard', quantity: 1 }] });
+  assert.equal(res.status, 429);
+  assert.equal(await stockOf('hoard'), 100);
+});
+
+test('SEC-03: order creation is rate limited per client', async () => {
+  await seedProduct({ slug: 'spam', price: 500, stock: 100 });
+  let last = 0;
+  for (let i = 0; i < 16; i++) last = (await order({ items: [] })).status;
+  assert.equal(last, 429);
+});
+
+test('INV-4: simultaneous orders cannot both claim a once-per-customer coupon', async () => {
+  await seedProduct({ slug: 'big-figure', price: 2500, stock: 50 });
+  const results = await Promise.all([1, 2, 3].map(() =>
+    order({ couponCode: 'WELCOME', items: [{ productId: 'big-figure', quantity: 1 }] })));
+  const statuses = results.map((r) => r.status);
+  assert.equal(statuses.filter((s) => s === 200).length, 1, `statuses ${statuses}`);
+  assert.ok(statuses.every((s) => s === 200 || s === 400), `no 5xx: ${statuses}`);
+  assert.equal(await stockOf('big-figure'), 49, 'losing orders must give their stock back');
+  assert.equal(await (await col('orders')).countDocuments({ couponCode: 'WELCOME' }), 1);
+});

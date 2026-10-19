@@ -105,7 +105,7 @@ export async function GET(req: NextRequest) {
       },
     });
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : 'Unknown geocoding error';
-    return NextResponse.json({ success: false, error: errorMsg }, { status: 500 });
+    console.error('Geocoding error:', err);
+    return NextResponse.json({ success: false, error: 'Could not look up that location' }, { status: 500 });
   }
 }
