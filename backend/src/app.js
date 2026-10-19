@@ -2,7 +2,8 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const corsOptions = require('./config/cors');
-const { globalLimiter } = require('./middleware/rateLimiter');
+const { globalLimiter, adminLimiter } = require('./middleware/rateLimiter');
+const sanitizeRequest = require('./middleware/sanitize');
 const notFound = require('./middleware/notFound');
 const errorHandler = require('./middleware/errorHandler');
 
@@ -17,6 +18,9 @@ const userRoutes = require('./routes/user.routes');
 const adminRoutes = require('./routes/admin.routes');
 
 const app = express();
+
+// Trust reverse proxy (Vercel, AWS ALB, Nginx, Cloudflare)
+app.set('trust proxy', 1);
 
 // Security Headers (Section 19)
 app.use(helmet());
@@ -34,6 +38,9 @@ app.use(
   })
 );
 app.use(express.urlencoded({ extended: true, limit: '1mb' }));
+
+// Strip Mongo operators ($...) and dotted keys from all client input
+app.use(sanitizeRequest);
 
 // Global Rate Limiting
 app.use(globalLimiter);
@@ -71,7 +78,7 @@ app.use('/api/v1/cart', cartRoutes);
 app.use('/api/v1/orders', orderRoutes);
 app.use('/api/v1/payments', paymentRoutes);
 app.use('/api/v1/users', userRoutes);
-app.use('/api/v1/admin', adminRoutes);
+app.use('/api/v1/admin', adminLimiter, adminRoutes);
 
 // Backwards Compatibility Aliases
 app.use('/api/products', productRoutes);

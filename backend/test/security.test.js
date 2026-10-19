@@ -4,7 +4,10 @@ const crypto = require('crypto');
 let serverInstance = null;
 let BASE_URL = process.env.API_BASE_URL || 'http://localhost:5002';
 
+let mongod = null;
+
 async function ensureServerRunning() {
+  process.env.NODE_ENV = 'test';
   try {
     const res = await fetch(`${BASE_URL}/health`, { signal: AbortSignal.timeout(1000) });
     if (res.ok) {
@@ -12,6 +15,12 @@ async function ensureServerRunning() {
     }
   } catch {
     // Server is not running, launch in-process for tests
+  }
+
+  if (!process.env.MONGODB_URI && !process.env.MONGO_URI) {
+    const { MongoMemoryServer } = require('mongodb-memory-server');
+    mongod = await MongoMemoryServer.create();
+    process.env.MONGODB_URI = mongod.getUri();
   }
 
   const app = require('../src/app');
@@ -29,6 +38,7 @@ async function ensureServerRunning() {
 
 async function runSecurityTests() {
   console.log('🛡️  [Security Test Suite] Starting Autonomous Adversarial Security Verification...\n');
+  process.env.RAZORPAY_WEBHOOK_SECRET = process.env.RAZORPAY_WEBHOOK_SECRET || 'sec_webhook_test_secret_32bytes_ok';
   await ensureServerRunning();
 
   let passed = 0;
@@ -276,6 +286,9 @@ async function runSecurityTests() {
       const { disconnectDatabase } = require('../src/config/database');
       await new Promise((resolve) => serverInstance.close(resolve));
       await disconnectDatabase();
+    }
+    if (mongod) {
+      await mongod.stop();
     }
   }
 

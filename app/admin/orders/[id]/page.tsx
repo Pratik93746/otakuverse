@@ -1,4 +1,5 @@
 import { getServerSession } from 'next-auth';
+import { authenticateAdminSession } from '@/lib/admin-auth';
 import { notFound } from 'next/navigation';
 import { authOptions } from '@/lib/auth';
 import { getOrderByNumber } from '@/lib/db/orders';
@@ -30,7 +31,7 @@ export default async function AdminOrderDetailPage(props: {
 }) {
   const session = await getServerSession(authOptions);
 
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || !(await authenticateAdminSession())) {
     return <AdminAuthGate currentSession={session} callbackUrl="/admin/orders" pageTitle="Order Fulfillment Details" />;
   }
 
@@ -136,9 +137,14 @@ export default async function AdminOrderDetailPage(props: {
         {/* Status Update Component */}
         <div className="mb-6">
           <OrderStatusChanger
-            orderNumber={order.orderNumber}
-            currentStatus={order.orderStatus}
-            initialTracking={order.tracking}
+            order={JSON.parse(JSON.stringify({
+              orderNumber: order.orderNumber,
+              orderStatus: order.orderStatus,
+              payment: order.payment,
+              total: order.total,
+              reviewFlags: order.reviewFlags || [],
+              tracking: order.tracking,
+            }))}
           />
         </div>
 
@@ -456,7 +462,10 @@ export default async function AdminOrderDetailPage(props: {
                         : 'bg-orange-100 text-orange-800'
                       }`}
                   >
-                    {order.payment?.paymentStatus || 'PENDING'}
+                    {order.payment?.paymentStatus === 'PAID' ? 'Paid'
+                      : order.payment?.paymentStatus === 'REFUNDED' ? 'Refunded'
+                      : order.payment?.paymentStatus === 'FAILED' ? 'Payment failed'
+                      : order.payment?.paymentMethod === 'COD' ? 'Pay on delivery' : 'Awaiting payment'}
                   </span>
                 </div>
                 <div>

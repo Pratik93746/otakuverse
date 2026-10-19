@@ -2,6 +2,9 @@ import { Suspense } from 'react';
 import type { Metadata } from 'next';
 import ShopClient from '@/app/shop/ShopClient';
 
+// Re-read prices, stock and visibility from the database at most once a minute.
+export const revalidate = 60;
+
 interface CollectionPageProps {
   params: Promise<{ slug: string }> | { slug: string };
   searchParams: Promise<{ [key: string]: string | string[] | undefined }> | { [key: string]: string | string[] | undefined };

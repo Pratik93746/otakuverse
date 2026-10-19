@@ -1,5 +1,22 @@
 import type { NextConfig } from 'next';
 
+const ENFORCED_CSP = ["frame-ancestors 'self'", "object-src 'none'", "base-uri 'self'", "form-action 'self'"].join('; ');
+
+const REPORT_ONLY_CSP = [
+  "default-src 'self'",
+  // 'unsafe-inline' is required by Next's inline bootstrap scripts until nonces are adopted.
+  "script-src 'self' 'unsafe-inline' https://checkout.razorpay.com https://apis.google.com https://www.gstatic.com",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "img-src 'self' data: blob: https:",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  "connect-src 'self' https://api.razorpay.com https://lumberjack.razorpay.com https://*.googleapis.com https://*.firebaseapp.com https://www.google-analytics.com",
+  "frame-src https://api.razorpay.com https://checkout.razorpay.com https://*.firebaseapp.com https://accounts.google.com",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  "frame-ancestors 'self'",
+].join('; ');
+
 const nextConfig: NextConfig = {
   compress: true,
   images: {
@@ -29,27 +46,22 @@ const nextConfig: NextConfig = {
       {
         source: '/(.*)',
         headers: [
-          {
-            key: 'X-Content-Type-Options',
-            value: 'nosniff',
-          },
-          {
-            key: 'X-Frame-Options',
-            value: 'SAMEORIGIN',
-          },
-          {
-            key: 'X-XSS-Protection',
-            value: '1; mode=block',
-          },
-          {
-            key: 'Referrer-Policy',
-            value: 'strict-origin-when-cross-origin',
-          },
-          {
-            key: 'Permissions-Policy',
-            value: 'camera=(), microphone=(), geolocation=()',
-          },
+          { key: 'X-Content-Type-Options', value: 'nosniff' },
+          { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+          { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+          { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains' },
+          // geolocation is used by checkout's "use my location"; payment by Razorpay.
+          { key: 'Permissions-Policy', value: 'camera=(), microphone=(), geolocation=(self), payment=(self)' },
+          // Enforced: directives that cannot break checkout or login.
+          { key: 'Content-Security-Policy', value: ENFORCED_CSP },
+          // Report-only until verified in a real browser against Razorpay + Google sign-in.
+          { key: 'Content-Security-Policy-Report-Only', value: REPORT_ONLY_CSP },
         ],
+      },
+      {
+        // API responses carry personal and financial data: never cache them.
+        source: '/api/(.*)',
+        headers: [{ key: 'Cache-Control', value: 'no-store' }],
       },
       {
         source: '/catalog/(.*)',
@@ -74,7 +86,3 @@ const nextConfig: NextConfig = {
 };
 
 export default nextConfig;
-
-if (process.env.NODE_ENV === 'development' && !process.env.VERCEL) {
-  import('@opennextjs/cloudflare').then(m => m.initOpenNextCloudflareForDev()).catch(() => {});
-}

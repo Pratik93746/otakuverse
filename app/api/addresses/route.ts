@@ -67,7 +67,10 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized: Sign in required' }, { status: 401 });
     }
 
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+    }
 
     const {
       fullName,
@@ -95,6 +98,11 @@ export async function POST(request: NextRequest) {
     const finalPin = pinCode || pincode;
     const finalCountry = country || 'India';
 
+    const textFields = [finalName, finalPhone, finalLine1, finalLine2, finalCity, finalState, finalPin, finalCountry];
+    if (textFields.some((v) => typeof v !== 'string' || v.length > 200) || (id !== undefined && typeof id !== 'string')) {
+      return NextResponse.json({ error: 'Address fields must be text of reasonable length' }, { status: 400 });
+    }
+
     if (!finalName || !finalPhone || !finalLine1 || !finalCity || !finalState || !finalPin) {
       return NextResponse.json(
         { error: 'Missing required address fields' },
@@ -121,6 +129,16 @@ export async function POST(request: NextRequest) {
         { error: 'Street address must be at least 5 characters long' },
         { status: 400 }
       );
+    }
+
+    if (!id) {
+      const existing = await getUserAddresses(user.uid);
+      if (existing.length >= 15) {
+        return NextResponse.json(
+          { error: 'Maximum 15 saved addresses allowed per account. Please remove an old address.' },
+          { status: 400 }
+        );
+      }
     }
 
     const saved = await saveAddress(

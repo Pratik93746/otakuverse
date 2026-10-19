@@ -1,11 +1,13 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireFirebaseUser, handleAuthError } from '@/lib/firebase-admin';
+import { requireFirebaseUser } from '@/lib/firebase-admin';
 import { generateOrderNumber } from '@/lib/utils';
-import { createOrder, getUserOrders } from '@/lib/db/orders';
+import { rateLimit } from '@/lib/rate-limit';
+import { createOrder, getUserOrders, bindRazorpayOrder, markOrderAbandoned, countOpenCodOrders, countPendingOnlineOrders, hasUsedCoupon, releaseExpiredReservations, getOrderByCustomerAndIdempotencyKey } from '@/lib/db/orders';
 import { clearCart } from '@/lib/db/carts';
 import { saveAddress } from '@/lib/db/addresses';
 import { findUserByFirebaseUid, upsertUser } from '@/lib/db/users';
-import { getProductByIdOrSlug, decrementProductStock } from '@/lib/db/products';
+import { getPurchasableProduct, decrementProductStock, incrementProductStock } from '@/lib/db/products';
+import { calculateCouponDiscount, ACTIVE_COUPONS } from '@/lib/coupons';
 import { OrderItem } from '@/lib/db/types';
 import { getServerSession } from 'next-auth';
 import { authOptions } from '@/lib/auth';
@@ -27,7 +29,7 @@ async function resolveUser(request: NextRequest): Promise<{ uid: string; email?:
   try {
     const session = await getServerSession(authOptions);
     if (session?.user) {
-      const uid = (session.user as any).firebaseUid || (session.user as any).id || session.user.email || '';
+      const uid = (session.user as any).firebaseUid || (session.user as any).id || '';
       return { uid, email: session.user.email || undefined };
     }
   } catch {
@@ -37,231 +39,315 @@ async function resolveUser(request: NextRequest): Promise<{ uid: string; email?:
   return null;
 }
 
+const MAX_LINES = 30;
+const MAX_QTY_PER_LINE = 20;
+/** Unfinished COD orders one account may hold at a time (limits fake-COD stock hoarding). */
+const MAX_OPEN_COD_ORDERS = 3;
+/** Unpaid online orders one account may hold at a time (each reserves stock for RESERVATION_MINUTES). */
+const MAX_PENDING_ONLINE_ORDERS = 5;
+/** How long an unpaid online order keeps its stock reserved. */
+const RESERVATION_MINUTES = 30;
+
+const text = (v: unknown, max: number): string => (typeof v === 'string' ? v.trim().slice(0, max) : '');
+
 export async function POST(request: NextRequest) {
+  const limited = rateLimit(request, 'order-create', 15);
+  if (!limited.ok) {
+    return NextResponse.json({ error: 'Too many order attempts. Please wait a minute.' }, { status: 429, headers: { 'Retry-After': String(limited.retryAfter) } });
+  }
   try {
-    const body = await request.json();
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+    }
 
-    const {
-      items,
-      address,
-      customerName,
-      customerEmail,
-      customerPhone,
-      deliveryMethod,
-      paymentMethod,
-      couponCode,
-      discount = 0,
-    } = body;
+    const { items, address, deliveryMethod, couponCode } = body;
+    const paymentMethod = body.paymentMethod === 'cod' ? 'cod' : 'razorpay';
 
+    // Checkout requires sign-in (the checkout page redirects to /login). Enforce it here
+    // too, so anonymous scripts cannot create confirmed COD orders that hold stock.
     const user = await resolveUser(request);
-    const orderUid = user?.uid || (customerEmail ? `cust_${customerEmail.replace(/[^a-zA-Z0-9]/g, '_')}` : `guest_${Date.now()}`);
-
-    if (!items?.length) {
-      return NextResponse.json({ error: 'No items in order' }, { status: 400 });
+    if (!user?.uid) {
+      return NextResponse.json({ error: 'Please sign in to place an order' }, { status: 401 });
     }
 
-    if (!address || !address.name || !address.line1 || !address.city) {
-      return NextResponse.json({ error: 'Complete delivery address is required' }, { status: 400 });
-    }
+    const rawIdempotency =
+      request.headers.get('idempotency-key') ||
+      request.headers.get('x-idempotency-key') ||
+      (typeof body.idempotencyKey === 'string' ? body.idempotencyKey : null);
+    const idempotencyKey = rawIdempotency ? rawIdempotency.trim().slice(0, 128) : null;
 
-    const pin = (address.pincode || address.pinCode || '').trim().replace(/\D/g, '');
-    if (!/^[1-9]\d{5}$/.test(pin)) {
-      return NextResponse.json({ error: 'A valid 6-digit Indian postal PIN code is required' }, { status: 400 });
-    }
-
-    const orderPhone = (customerPhone || address.phone || '').trim().replace(/\D/g, '');
-    if (!/^[6-9]\d{9}$/.test(orderPhone)) {
-      return NextResponse.json({ error: 'A valid 10-digit Indian mobile number starting with 6, 7, 8, or 9 is required' }, { status: 400 });
-    }
-
-    if (address.line1.trim().length < 5) {
-      return NextResponse.json({ error: 'Delivery street address must be at least 5 characters long' }, { status: 400 });
-    }
-
-    if (address.city.trim().length < 2) {
-      return NextResponse.json({ error: 'Valid city name is required' }, { status: 400 });
-    }
-
-    // Ensure user profile in MongoDB if authenticated
-    let dbUser: any = null;
-    if (user?.uid) {
-      dbUser = await findUserByFirebaseUid(user.uid);
-      if (!dbUser) {
-        dbUser = await upsertUser(user.uid, {
-          email: user.email || customerEmail || `${user.uid}@collector.baka.style`,
-          name: customerName || 'Collector',
+    if (idempotencyKey) {
+      const existing = await getOrderByCustomerAndIdempotencyKey(user.uid, idempotencyKey);
+      if (existing && existing.orderStatus !== 'CANCELLED') {
+        const { key_id: razorpayKeyId } = getRazorpayCredentials();
+        return NextResponse.json({
+          orderNumber: existing.orderNumber,
+          orderId: existing._id?.toString() || existing.orderNumber,
+          razorpayOrderId: existing.payment?.razorpayOrderId || null,
+          razorpayKeyId,
+          total: existing.total,
+          idempotentReplay: true,
         });
       }
     }
 
-    const email = customerEmail || dbUser?.email || user?.email || 'collector@baka.style';
-    const name = customerName || address.name || dbUser?.name || 'Valued Collector';
-    const phone = customerPhone || address.phone || dbUser?.phone || '';
+    if (!Array.isArray(items) || items.length === 0) {
+      return NextResponse.json({ error: 'No items in order' }, { status: 400 });
+    }
+    if (items.length > MAX_LINES) {
+      return NextResponse.json({ error: 'Too many items in one order' }, { status: 400 });
+    }
 
-    // Calculate subtotal server-side by looking up verified products in MongoDB
+    if (!address || typeof address !== 'object') {
+      return NextResponse.json({ error: 'Complete delivery address is required' }, { status: 400 });
+    }
+    const addr = {
+      name: text(address.name ?? address.fullName, 100),
+      line1: text(address.line1 ?? address.addressLine1, 200),
+      line2: text(address.line2 ?? address.addressLine2, 200),
+      city: text(address.city, 100),
+      state: text(address.state, 100),
+      pincode: text(address.pincode ?? address.pinCode, 10).replace(/\D/g, ''),
+      phone: text(address.phone, 20),
+      country: text(address.country, 60) || 'India',
+    };
+
+    if (!addr.name || !addr.line1 || !addr.city) {
+      return NextResponse.json({ error: 'Complete delivery address is required' }, { status: 400 });
+    }
+    if (!/^[1-9]\d{5}$/.test(addr.pincode)) {
+      return NextResponse.json({ error: 'A valid 6-digit Indian postal PIN code is required' }, { status: 400 });
+    }
+    const orderPhone = (text(body.customerPhone, 20) || addr.phone).replace(/\D/g, '').replace(/^(91|0)(?=[6-9]\d{9}$)/, '');
+    if (!/^[6-9]\d{9}$/.test(orderPhone)) {
+      return NextResponse.json({ error: 'A valid 10-digit Indian mobile number starting with 6, 7, 8, or 9 is required' }, { status: 400 });
+    }
+    if (addr.line1.length < 5) {
+      return NextResponse.json({ error: 'Delivery street address must be at least 5 characters long' }, { status: 400 });
+    }
+    if (addr.city.length < 2) {
+      return NextResponse.json({ error: 'Valid city name is required' }, { status: 400 });
+    }
+
+    // Merge duplicate lines so the stock check sees the true total per product.
+    const wanted = new Map<string, number>();
+    for (const item of items) {
+      const ref = item?.productId ?? item?.slug;
+      const quantity = Number(item?.quantity);
+      if (typeof ref !== 'string' || !ref) {
+        return NextResponse.json({ error: 'Invalid item in order' }, { status: 400 });
+      }
+      if (!Number.isInteger(quantity) || quantity < 1 || quantity > MAX_QTY_PER_LINE) {
+        return NextResponse.json({ error: `Quantity must be a whole number between 1 and ${MAX_QTY_PER_LINE}` }, { status: 400 });
+      }
+      wanted.set(ref, (wanted.get(ref) || 0) + quantity);
+    }
+
+    // Ensure user profile in MongoDB
+    let dbUser: any = await findUserByFirebaseUid(user.uid);
+    if (!dbUser) {
+      dbUser = await upsertUser(user.uid, {
+        email: user.email || `${user.uid}@collector.baka.style`,
+        name: text(body.customerName, 100) || 'Collector',
+      });
+    }
+
+    const email = user.email || text(body.customerEmail, 200) || dbUser?.email || '';
+    const name = text(body.customerName, 100) || addr.name || dbUser?.name || 'Valued Collector';
+
+    // Price every line from the database. Nothing the browser says about price is used.
     let serverSubtotal = 0;
     const verifiedItems: OrderItem[] = [];
+    const merged = new Map<string, { product: any; quantity: number }>();
 
-    for (const item of items) {
-      const dbProduct = await getProductByIdOrSlug(item.productId || item.slug || item.name);
-
+    for (const [ref, quantity] of wanted) {
+      const dbProduct = await getPurchasableProduct(ref);
       if (!dbProduct) {
+        return NextResponse.json({ error: 'An item in your cart is no longer available in our store catalog.' }, { status: 400 });
+      }
+      const key = dbProduct._id?.toString() || dbProduct.slug;
+      const prev = merged.get(key);
+      merged.set(key, { product: dbProduct, quantity: (prev?.quantity || 0) + quantity });
+    }
+
+    for (const { product: dbProduct, quantity } of merged.values()) {
+      if (!(dbProduct.stock >= quantity)) {
         return NextResponse.json(
-          { error: `Item "${item.name || item.productId || 'Unknown'}" is not available in our store catalog.` },
+          { error: `Insufficient stock for "${dbProduct.name}". Only ${Math.max(0, dbProduct.stock || 0)} left in stock.` },
           { status: 400 }
         );
       }
-
-      const quantity = Math.max(1, parseInt(item.quantity, 10) || 1);
-
-      if (dbProduct.stock < quantity) {
-        return NextResponse.json(
-          { error: `Insufficient stock for "${dbProduct.name}". Only ${dbProduct.stock} left in stock.` },
-          { status: 400 }
-        );
-      }
-
       const unitPrice = dbProduct.price;
       const itemSubtotal = unitPrice * quantity;
       serverSubtotal += itemSubtotal;
-
       verifiedItems.push({
-        productId: dbProduct._id?.toString() || dbProduct.slug || item.productId,
+        productId: dbProduct._id?.toString() || dbProduct.slug,
         name: dbProduct.name,
         slug: dbProduct.slug,
-        image: dbProduct.image || (dbProduct.images && dbProduct.images[0]) || item.image || '',
+        image: dbProduct.image || (dbProduct.images && dbProduct.images[0]) || '',
         characterName: dbProduct.characterName || undefined,
         animeName: dbProduct.animeName || undefined,
         brandName: dbProduct.brandName || undefined,
-        sku: dbProduct.slug || dbProduct._id?.toString() || item.productId,
+        sku: dbProduct.slug || dbProduct._id?.toString(),
         purchasePrice: unitPrice,
         quantity,
         subtotal: itemSubtotal,
       });
     }
 
-    // Server-side discount calculation strictly from valid coupon
+    // Server-side discount strictly from a valid coupon. An invalid code is an error,
+    // not a silent full-price charge the customer did not expect.
     let validDiscount = 0;
-    if (couponCode) {
-      const { calculateCouponDiscount } = await import('@/lib/coupons');
-      const couponResult = calculateCouponDiscount(couponCode, serverSubtotal);
-      if (couponResult.valid) {
-        validDiscount = couponResult.discount;
+    let appliedCoupon: string | null = null;
+    if (couponCode !== undefined && couponCode !== null && couponCode !== '') {
+      if (typeof couponCode !== 'string') {
+        return NextResponse.json({ error: 'Invalid coupon code' }, { status: 400 });
       }
+      const couponResult = calculateCouponDiscount(couponCode, serverSubtotal);
+      if (!couponResult.valid) {
+        return NextResponse.json({ error: couponResult.reason || 'Invalid or expired coupon code' }, { status: 400 });
+      }
+      appliedCoupon = couponCode.toUpperCase().trim();
+      if (ACTIVE_COUPONS[appliedCoupon]?.oncePerCustomer && (await hasUsedCoupon(user.uid, appliedCoupon))) {
+        return NextResponse.json({ error: `Coupon ${appliedCoupon} can only be used once per customer` }, { status: 400 });
+      }
+      validDiscount = couponResult.discount;
     }
 
-    // Free delivery and taxes included in price on all orders
+    // Free delivery and taxes included in price on all orders. Work in paise to avoid float drift.
     const shipping = 0;
     const tax = 0;
-    const serverTotal = Math.max(1, serverSubtotal + shipping + tax - validDiscount);
+    const totalPaise = Math.round(serverSubtotal * 100) + shipping + tax - Math.round(validDiscount * 100);
+    if (totalPaise < 100) {
+      return NextResponse.json({ error: 'Order total is below the minimum payable amount' }, { status: 400 });
+    }
+    const serverTotal = totalPaise / 100;
+
+    if (paymentMethod === 'cod') {
+      const open = await countOpenCodOrders(user.uid);
+      if (open >= MAX_OPEN_COD_ORDERS) {
+        return NextResponse.json(
+          { error: 'You already have several cash-on-delivery orders in progress. Please pay online or wait for them to be delivered.' },
+          { status: 429 }
+        );
+      }
+    }
+
+    // Stops one account from locking up the whole catalogue with unpaid reservations.
+    if (paymentMethod === 'razorpay' && (await countPendingOnlineOrders(user.uid)) >= MAX_PENDING_ONLINE_ORDERS) {
+      return NextResponse.json(
+        { error: 'You have several unpaid orders waiting for payment. Please complete or wait for them to expire before placing another.' },
+        { status: 429 }
+      );
+    }
+
+    const { key_id: razorpayKeyId } = getRazorpayCredentials();
+    const rzp = paymentMethod === 'razorpay' ? getRazorpayClient() : null;
+    if (paymentMethod === 'razorpay' && !rzp) {
+      return NextResponse.json({ error: 'Razorpay payment gateway is not configured. Please contact support.' }, { status: 500 });
+    }
+
+    // Give back stock held by unpaid online orders whose payment window has passed.
+    await releaseExpiredReservations().catch((e) => console.error('Reservation sweep failed:', e?.message));
+
+    // Take (reserve) the stock now, atomically and all-or-nothing, for COD and online orders alike.
+    // Payment later does NOT deduct again. Unpaid online reservations expire automatically.
+    const taken: OrderItem[] = [];
+    for (const item of verifiedItems) {
+      if (await decrementProductStock(item.productId, item.quantity)) {
+        taken.push(item);
+      } else {
+        for (const t of taken) await incrementProductStock(t.productId, t.quantity);
+        return NextResponse.json({ error: `"${item.name}" just sold out. Please update your cart.` }, { status: 409 });
+      }
+    }
 
     const orderNumber = generateOrderNumber();
-
-    // Create Razorpay order if online payment
-    let razorpayOrderId: string | null = null;
-    const { key_id: razorpayKeyId } = getRazorpayCredentials();
-
-    if (paymentMethod !== 'cod') {
-      const rzp = getRazorpayClient();
-      if (!rzp) {
-        return NextResponse.json(
-          { error: 'Razorpay payment gateway is not configured. Please contact support.' },
-          { status: 500 }
-        );
-      }
-
-      try {
-        const rpOrder = await rzp.orders.create({
-          amount: Math.round(serverTotal * 100),
-          currency: 'INR',
-          receipt: orderNumber,
-          notes: {
-            orderNumber,
-            userId: orderUid,
-          },
-        });
-        razorpayOrderId = rpOrder.id;
-      } catch (rpErr: any) {
-        console.error('Razorpay order creation failed:', rpErr);
-        return NextResponse.json(
-          { error: rpErr?.error?.description || rpErr?.message || 'Failed to initialize payment gateway' },
-          { status: 500 }
-        );
-      }
-    }
-
     const shippingAddressSnapshot = {
-      fullName: address.name || address.fullName,
-      phone: address.phone,
-      addressLine1: address.line1 || address.addressLine1,
-      addressLine2: address.line2 || address.addressLine2 || '',
-      city: address.city,
-      state: address.state,
-      pinCode: address.pincode || address.pinCode,
-      country: address.country || 'India',
+      fullName: addr.name,
+      phone: addr.phone || orderPhone,
+      addressLine1: addr.line1,
+      addressLine2: addr.line2,
+      city: addr.city,
+      state: addr.state,
+      pinCode: addr.pincode,
+      country: addr.country,
     };
 
-    // Save address to user's saved addresses in MongoDB
-    if (user?.uid) {
-      try {
-        await saveAddress(user.uid, shippingAddressSnapshot);
-      } catch (addrErr) {
-        console.debug('Address save notice:', addrErr);
-      }
+    try {
+      await saveAddress(user.uid, shippingAddressSnapshot);
+    } catch (addrErr) {
+      console.debug('Address save notice:', addrErr);
     }
 
+    // Record the order before talking to the gateway, so a gateway order can never
+    // exist without a matching order in our database.
     const now = new Date();
-    const order = await createOrder({
-      orderNumber,
-      firebaseUid: orderUid,
-      customer: {
-        name,
-        email,
-        phone,
-      },
-      shippingAddress: shippingAddressSnapshot,
-      items: verifiedItems,
-      subtotal: serverSubtotal,
-      shipping,
-      tax,
-      discount: validDiscount,
-      total: serverTotal,
-      couponCode: couponCode || null,
-      deliveryMethod: deliveryMethod || 'standard',
-      orderStatus: paymentMethod === 'cod' ? 'CONFIRMED' : 'PENDING',
-      payment: {
-        paymentStatus: 'PENDING',
-        paymentId: null,
-        razorpayOrderId: razorpayOrderId || null,
-        razorpaySignature: null,
-        paymentMethod: paymentMethod === 'cod' ? 'COD' : 'RAZORPAY',
-        amount: serverTotal,
-        currency: 'INR',
-        createdAt: now,
-      },
-    });
+    let order;
+    try {
+      order = await createOrder({
+        orderNumber,
+        firebaseUid: user.uid,
+        customer: { name, email, phone: orderPhone },
+        shippingAddress: shippingAddressSnapshot,
+        items: verifiedItems,
+        subtotal: serverSubtotal,
+        shipping,
+        tax,
+        discount: validDiscount,
+        total: serverTotal,
+        couponCode: appliedCoupon,
+        couponOnceKey: appliedCoupon && ACTIVE_COUPONS[appliedCoupon]?.oncePerCustomer ? appliedCoupon : null,
+        deliveryMethod: deliveryMethod === 'express' ? 'express' : 'standard',
+        orderStatus: paymentMethod === 'cod' ? 'CONFIRMED' : 'PENDING',
+        stockHeld: true,
+        reservationExpiresAt: paymentMethod === 'cod' ? null : new Date(now.getTime() + RESERVATION_MINUTES * 60_000),
+        statusHistory: [{ at: now, from: null, to: paymentMethod === 'cod' ? 'CONFIRMED' : 'PENDING', by: 'system:checkout' }],
+        idempotencyKey: idempotencyKey || null,
+        payment: {
+          paymentStatus: 'PENDING',
+          paymentId: null,
+          razorpayOrderId: null,
+          razorpaySignature: null,
+          paymentMethod: paymentMethod === 'cod' ? 'COD' : 'RAZORPAY',
+          amount: serverTotal,
+          currency: 'INR',
+          createdAt: now,
+        },
+      });
+    } catch (dbErr) {
+      // The order could not be saved: give the reserved stock back before failing.
+      for (const t of taken) await incrementProductStock(t.productId, t.quantity).catch(() => false);
+      // Lost the race for a once-per-customer coupon: the unique index refused the second order.
+      if ((dbErr as any)?.code === 11000 && (dbErr as any)?.keyPattern?.couponOnceKey) {
+        return NextResponse.json({ error: `Coupon ${appliedCoupon} can only be used once per customer` }, { status: 400 });
+      }
+      throw dbErr;
+    }
 
-    // Clear MongoDB cart for this user
-    if (user?.uid) {
+    let razorpayOrderId: string | null = null;
+    if (rzp) {
       try {
-        await clearCart(user.uid);
-      } catch (cartErr) {
-        console.debug('Clear cart notice:', cartErr);
+        const rpOrder = await rzp.orders.create({
+          amount: totalPaise,
+          currency: 'INR',
+          receipt: orderNumber,
+          notes: { orderNumber, userId: user.uid },
+        });
+        razorpayOrderId = rpOrder.id;
+        await bindRazorpayOrder(orderNumber, rpOrder.id);
+      } catch (rpErr: any) {
+        console.error('Razorpay order creation failed:', rpErr?.error?.description || rpErr?.message);
+        await markOrderAbandoned(orderNumber, 'payment gateway unavailable');
+        return NextResponse.json({ error: 'Could not start the payment. Please try again in a moment.' }, { status: 502 });
       }
     }
 
-    // Automatically decrement stock on sale for confirmed COD orders
-    if (paymentMethod === 'cod') {
-      for (const item of verifiedItems) {
-        const prodId = item.productId || item.slug;
-        if (prodId) {
-          try {
-            await decrementProductStock(prodId, item.quantity);
-          } catch (stkErr) {
-            console.warn(`Could not decrement stock for ${prodId}:`, stkErr);
-          }
-        }
-      }
+    try {
+      await clearCart(user.uid);
+    } catch (cartErr) {
+      console.debug('Clear cart notice:', cartErr);
     }
 
     return NextResponse.json({
@@ -271,9 +357,9 @@ export async function POST(request: NextRequest) {
       razorpayKeyId,
       total: serverTotal,
     });
-  } catch (err: any) {
+  } catch (err) {
     console.error('Order creation error:', err);
-    return NextResponse.json({ error: err?.message || 'Failed to place order' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to place order. Please try again.' }, { status: 500 });
   }
 }
 
@@ -319,7 +405,8 @@ export async function GET(request: NextRequest) {
         },
       })),
     });
-  } catch (err: any) {
-    return NextResponse.json({ error: err?.message || 'Failed to fetch orders' }, { status: 500 });
+  } catch (err) {
+    console.error('Order list error:', err);
+    return NextResponse.json({ error: 'Failed to fetch orders' }, { status: 500 });
   }
 }

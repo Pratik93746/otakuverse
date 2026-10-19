@@ -6,6 +6,7 @@ import {
   signInWithEmailAndPassword,
   createUserWithEmailAndPassword,
   updateProfile,
+  sendEmailVerification,
   sendPasswordResetEmail,
   signOut as firebaseSignOut,
   onAuthStateChanged,
@@ -31,8 +32,6 @@ export const firebaseConfig = {
 export const isFirebaseConfigured = true;
 
 let app: FirebaseApp;
-let auth: Auth;
-let googleProvider: GoogleAuthProvider;
 let analytics: Analytics | null = null;
 
 if (!getApps().length) {
@@ -41,8 +40,8 @@ if (!getApps().length) {
   app = getApp();
 }
 
-auth = getAuth(app);
-googleProvider = new GoogleAuthProvider();
+const auth: Auth = getAuth(app);
+const googleProvider: GoogleAuthProvider = new GoogleAuthProvider();
 googleProvider.setCustomParameters({ prompt: 'select_account' });
 
 // Initialize Firebase Analytics on client-side only
@@ -83,6 +82,13 @@ export async function signUpWithFirebaseEmail(email: string, pass: string, displ
   const userCredential = await createUserWithEmailAndPassword(auth, email, pass);
   if (displayName && userCredential.user) {
     await updateProfile(userCredential.user, { displayName });
+  }
+  // Without a verified email the account can never receive admin rights, and
+  // the owner can trust that order emails reach the customer.
+  if (userCredential.user && !userCredential.user.emailVerified) {
+    await sendEmailVerification(userCredential.user).catch((err) =>
+      console.warn('Verification email could not be sent:', err?.code || err)
+    );
   }
   return userCredential;
 }

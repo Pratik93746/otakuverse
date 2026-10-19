@@ -5,20 +5,25 @@ export async function GET(request: NextRequest) {
   try {
     const sp = request.nextUrl.searchParams;
 
-    const page = Math.max(1, parseInt(sp.get('page') ?? '1', 10));
-    const limit = Math.min(48, parseInt(sp.get('limit') ?? '24', 10));
+    const page = Math.max(1, parseInt(sp.get('page') ?? '1', 10) || 1);
+    const limit = Math.min(48, Math.max(1, parseInt(sp.get('limit') ?? '24', 10) || 24));
+    const num = (key: string) => {
+      const n = parseFloat(sp.get(key) ?? '');
+      return Number.isFinite(n) && n >= 0 ? n : undefined;
+    };
+    const short = (key: string) => (sp.get(key) || '').slice(0, 100) || undefined;
 
     const options: ProductQueryOptions = {
       page,
       limit,
-      filter: sp.get('filter') || undefined,
-      category: sp.get('category') || undefined,
-      anime: sp.get('anime') || undefined,
-      brand: sp.get('brand') || undefined,
-      character: sp.get('character') || undefined,
-      minPrice: sp.get('minPrice') ? parseFloat(sp.get('minPrice')!) : undefined,
-      maxPrice: sp.get('maxPrice') ? parseFloat(sp.get('maxPrice')!) : undefined,
-      search: sp.get('q') || undefined,
+      filter: short('filter'),
+      category: short('category'),
+      anime: short('anime'),
+      brand: short('brand'),
+      character: short('character'),
+      minPrice: num('minPrice'),
+      maxPrice: num('maxPrice'),
+      search: short('q'),
       sort: sp.get('sort') || 'featured',
       inStock: sp.get('inStock') === 'true',
     };

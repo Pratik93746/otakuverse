@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { verifyAdminRequest } from '@/lib/admin-auth';
+import { authenticateAdmin } from '@/lib/admin-auth';
+import { recordAudit } from '@/lib/db/audit';
 import { put, list } from '@vercel/blob';
 import sharp from 'sharp';
 
@@ -62,7 +63,8 @@ function isValidImageHeader(buf: Buffer): boolean {
 
 // Compress image to WebP with auto-orientation & resizing
 async function compressImageBuffer(inputBuffer: Buffer): Promise<Buffer> {
-  return sharp(inputBuffer)
+  // limitInputPixels guards against decompression-bomb images (tiny file, huge canvas).
+  return sharp(inputBuffer, { limitInputPixels: 50_000_000 })
     .rotate() // Auto-orient phone camera shots
     .resize({
       width: 1400,
@@ -83,8 +85,8 @@ async function compressImageBuffer(inputBuffer: Buffer): Promise<Buffer> {
  */
 export async function GET(request: NextRequest) {
   try {
-    const isAdmin = await verifyAdminRequest(request);
-    if (!isAdmin) {
+    const actor = await authenticateAdmin(request);
+    if (!actor) {
       return NextResponse.json({ error: 'Unauthorized: Admin privileges required' }, { status: 403 });
     }
 
@@ -123,7 +125,7 @@ export async function GET(request: NextRequest) {
     });
   } catch (err: any) {
     console.error('Storage status error:', err);
-    return NextResponse.json({ error: err?.message || 'Failed to fetch storage status' }, { status: 500 });
+    return NextResponse.json({ error: 'Failed to fetch storage status' }, { status: 500 });
   }
 }
 
@@ -132,8 +134,8 @@ export async function GET(request: NextRequest) {
  */
 export async function POST(request: NextRequest) {
   try {
-    const isAdmin = await verifyAdminRequest(request);
-    if (!isAdmin) {
+    const actor = await authenticateAdmin(request);
+    if (!actor) {
       return NextResponse.json({ error: 'Unauthorized: Admin privileges required' }, { status: 403 });
     }
 
@@ -185,14 +187,19 @@ export async function POST(request: NextRequest) {
     }
     // Case 2: JSON payload with base64 data URI
     else if (contentType.includes('application/json')) {
-      const body = await request.json();
-      const { base64, filename = 'poster.webp' } = body;
+      const body = await request.json().catch(() => null);
+      const base64 = body?.base64;
+      const filename = body?.filename ?? 'poster.webp';
 
       if (!base64 || typeof base64 !== 'string') {
         return NextResponse.json({ error: 'Base64 image data is required' }, { status: 400 });
       }
+      // Reject oversized payloads before decoding them into memory (base64 is ~4/3 of the bytes).
+      if (base64.length > 28 * 1024 * 1024) {
+        return NextResponse.json({ error: 'Original image exceeds 20MB limit' }, { status: 400 });
+      }
 
-      originalName = filename;
+      originalName = typeof filename === 'string' ? filename.slice(0, 200) : 'poster.webp';
       const matches = base64.match(/^data:([A-Za-z-+/]+);base64,(.+)$/);
       if (matches && matches.length === 3) {
         rawBuffer = Buffer.from(matches[2], 'base64');
@@ -254,6 +261,13 @@ export async function POST(request: NextRequest) {
       token,
     });
 
+    await recordAudit({
+      actor: actor.email || actor.uid,
+      action: 'upload.create',
+      target: blob.pathname,
+      detail: { url: blob.url, size: compressedBuffer.length },
+    }).catch((e) => console.warn('Upload audit warning:', e?.message));
+
     // 6. Update in-memory storage stats
     if (cachedStorage) {
       cachedStorage.totalBytes += compressedBuffer.length;
@@ -286,7 +300,7 @@ export async function POST(request: NextRequest) {
       );
     }
     return NextResponse.json(
-      { error: errorMsg || 'Failed to upload image to Vercel Blob' },
+      { error: 'Failed to upload image to Vercel Blob' },
       { status: 500 }
     );
   }

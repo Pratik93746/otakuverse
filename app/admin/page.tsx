@@ -1,4 +1,5 @@
 import { getServerSession } from 'next-auth';
+import { authenticateAdminSession } from '@/lib/admin-auth';
 import { authOptions } from '@/lib/auth';
 import { getAllOrders } from '@/lib/db/orders';
 import { getAllCarts } from '@/lib/db/carts';
@@ -26,7 +27,7 @@ export const revalidate = 0;
 export default async function AdminDashboardPage() {
   const session = await getServerSession(authOptions);
 
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || !(await authenticateAdminSession())) {
     return <AdminAuthGate currentSession={session} callbackUrl="/admin" pageTitle="Store Management Dashboard" />;
   }
 

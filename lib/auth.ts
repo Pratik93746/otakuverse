@@ -1,14 +1,32 @@
 import { NextAuthOptions, User as NextAuthUser } from 'next-auth';
 import CredentialsProvider from 'next-auth/providers/credentials';
-import GoogleProvider from 'next-auth/providers/google';
 import { isAllowedAdminEmail } from '@/lib/firebase-admin';
+
+/**
+ * Read a Firebase account using an ID token Firebase issued. Returns the account's
+ * own record, including whether the email address has been verified.
+ */
+async function lookupFirebaseAccount(idToken: string): Promise<{
+  uid: string; email: string | null; emailVerified: boolean; displayName?: string;
+} | null> {
+  const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+  if (!apiKey) return null;
+  const res = await fetch(`https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ idToken }),
+    signal: AbortSignal.timeout(8000),
+  });
+  if (!res.ok) return null;
+  const data = await res.json();
+  const u = data?.users?.[0];
+  if (!u?.localId) return null;
+  const email = typeof u.email === 'string' ? u.email.toLowerCase().trim() : null;
+  return { uid: u.localId, email, emailVerified: !!email && u.emailVerified === true, displayName: u.displayName };
+}
 
 export const authOptions: NextAuthOptions = {
   providers: [
-    GoogleProvider({
-      clientId: process.env.GOOGLE_CLIENT_ID ?? '',
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET ?? '',
-    }),
     CredentialsProvider({
       name: 'credentials',
       credentials: {
@@ -27,7 +45,9 @@ export const authOptions: NextAuthOptions = {
         let verifiedName: string = credentials.name || cleanEmail.split('@')[0];
         let isEmailVerified = false;
 
-        // 1. Verify via cryptographic Firebase ID Token if supplied
+        // 1. Verify via cryptographic Firebase ID Token if supplied.
+        //    Identity (uid, email, email_verified) comes only from the verified token,
+        //    never from the email the browser typed.
         if (credentials.idToken) {
           try {
             const { adminAuth } = await import('@/lib/firebase-admin');
@@ -35,40 +55,28 @@ export const authOptions: NextAuthOptions = {
               const decoded = await adminAuth.verifyIdToken(credentials.idToken);
               if (decoded && decoded.uid) {
                 verifiedUid = decoded.uid;
-                verifiedEmail = (decoded.email || cleanEmail).toLowerCase().trim();
+                verifiedEmail = decoded.email ? decoded.email.toLowerCase().trim() : null;
                 verifiedName = decoded.name || verifiedName;
-                isEmailVerified = !!decoded.email_verified;
+                isEmailVerified = !!decoded.email && decoded.email_verified === true;
               }
             } else {
-              // Fallback to Google Identity Toolkit token lookup
-              const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
-              if (!apiKey) {
-                console.warn('⚠️ NEXT_PUBLIC_FIREBASE_API_KEY not set, skipping Identity Toolkit lookup');
-                return null;
-              }
-              const lookupRes = await fetch(
-                `https://identitytoolkit.googleapis.com/v1/accounts:lookup?key=${apiKey}`,
-                {
-                  method: 'POST',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ idToken: credentials.idToken }),
-                }
-              );
-              const lookupData = await lookupRes.json();
-              if (lookupRes.ok && lookupData.users?.[0]?.localId) {
-                const u = lookupData.users[0];
-                verifiedUid = u.localId;
-                verifiedEmail = (u.email || cleanEmail).toLowerCase().trim();
-                verifiedName = u.displayName || verifiedName;
-                isEmailVerified = !!u.emailVerified;
+              const account = await lookupFirebaseAccount(credentials.idToken);
+              if (account) {
+                verifiedUid = account.uid;
+                verifiedEmail = account.email;
+                verifiedName = account.displayName || verifiedName;
+                isEmailVerified = account.emailVerified;
               }
             }
           } catch (tokenErr) {
-            console.warn('⚠️ ID Token verification failed:', tokenErr);
+            console.warn('⚠️ ID Token verification failed:', (tokenErr as Error)?.message);
           }
         }
 
-        // 2. Server-side fallback: Authenticate with Firebase Auth REST API with verified password
+        // 2. Server-side fallback: password sign-in via Firebase Auth REST API.
+        //    A successful password sign-in proves the password, NOT ownership of the
+        //    mailbox (`registered` is always true on success). Email verification is
+        //    read from Firebase's account record using the token Firebase just issued.
         if (!verifiedUid && credentials.password) {
           try {
             const apiKey = process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
@@ -86,19 +94,22 @@ export const authOptions: NextAuthOptions = {
                   password: credentials.password,
                   returnSecureToken: true,
                 }),
+                signal: AbortSignal.timeout(8000),
               }
             );
 
             const fbData = await fbRes.json();
-            if (fbRes.ok && fbData.localId) {
-              verifiedUid = fbData.localId;
-              verifiedEmail = cleanEmail;
-              verifiedName = fbData.displayName || cleanEmail.split('@')[0];
-              // Email/password login only verified if registered or verified
-              isEmailVerified = !!fbData.registered;
+            if (fbRes.ok && fbData.localId && fbData.idToken) {
+              const account = await lookupFirebaseAccount(fbData.idToken);
+              if (account && account.uid === fbData.localId) {
+                verifiedUid = account.uid;
+                verifiedEmail = account.email;
+                verifiedName = account.displayName || fbData.displayName || cleanEmail.split('@')[0];
+                isEmailVerified = account.emailVerified;
+              }
             }
           } catch (err) {
-            console.error('Server-side Firebase auth fallback failed:', err);
+            console.error('Server-side Firebase auth fallback failed:', (err as Error)?.message);
           }
         }
 
@@ -108,7 +119,7 @@ export const authOptions: NextAuthOptions = {
         }
 
         // Check if user role is ADMIN in MongoDB or verified admin email
-        const isAllowedAdmin = isAllowedAdminEmail(verifiedEmail || cleanEmail, isEmailVerified);
+        const isAllowedAdmin = isAllowedAdminEmail(verifiedEmail, isEmailVerified);
         let userRole: 'USER' | 'ADMIN' = 'USER';
         try {
           const { findUserByFirebaseUid, upsertUser } = await import('@/lib/db/users');
@@ -119,7 +130,7 @@ export const authOptions: NextAuthOptions = {
             userRole = 'ADMIN';
           } else if (!dbUser) {
             await upsertUser(verifiedUid, {
-              email: verifiedEmail || cleanEmail,
+              email: verifiedEmail || `${verifiedUid}@users.noemail`,
               name: verifiedName,
               role: 'USER',
             });
@@ -130,7 +141,7 @@ export const authOptions: NextAuthOptions = {
 
         return {
           id: verifiedUid,
-          email: verifiedEmail || cleanEmail,
+          email: verifiedEmail,
           name: verifiedName,
           image: null,
           role: userRole,
@@ -140,6 +151,9 @@ export const authOptions: NextAuthOptions = {
   ],
   session: {
     strategy: 'jwt',
+    // Shorter than the 30-day default so a removed admin's cookie expires sooner.
+    // Admin APIs still re-check the database role / verified allowlist on every call.
+    maxAge: 7 * 24 * 60 * 60,
   },
   callbacks: {
     async jwt({ token, user }) {

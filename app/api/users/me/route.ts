@@ -73,8 +73,26 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const body = await request.json();
-    const { name, phone, image } = body;
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+    }
+
+    // Only plain, bounded strings are stored; the image must be an http(s) URL.
+    const name = typeof body.name === 'string' ? body.name.trim().slice(0, 100) : '';
+    const phone = typeof body.phone === 'string' ? body.phone.trim().slice(0, 20) : undefined;
+    let image: string | undefined;
+    if (typeof body.image === 'string' && body.image.trim()) {
+      try {
+        const u = new URL(body.image.trim());
+        if (u.protocol === 'https:' || u.protocol === 'http:') image = u.toString().slice(0, 1000);
+      } catch {
+        // ignore an unusable image URL
+      }
+    }
+    if ((body.name !== undefined && typeof body.name !== 'string') || (body.phone !== undefined && typeof body.phone !== 'string')) {
+      return NextResponse.json({ error: 'Name and phone must be text' }, { status: 400 });
+    }
 
     const updatedUser = await upsertUser(verifiedUser.uid, {
       email: verifiedUser.email || `${verifiedUser.uid}@collector.baka.style`,

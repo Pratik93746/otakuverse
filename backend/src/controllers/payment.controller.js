@@ -32,7 +32,7 @@ const verifyPayment = async (req, res, next) => {
       );
     }
 
-    const result = await paymentService.verifyPayment(rzpOrderId, rzpPaymentId, rzpSig);
+    const result = await paymentService.verifyPayment(rzpOrderId, rzpPaymentId, rzpSig, req.user && req.user.uid);
     return successResponse(res, result, 200);
   } catch (error) {
     next(error);
@@ -47,7 +47,10 @@ const handleWebhook = async (req, res, next) => {
     return res.status(200).json(result);
   } catch (error) {
     console.error('Webhook error:', error.message);
-    return res.status(400).json({ error: error.message });
+    // 5xx makes Razorpay retry (transient/config problems); 4xx for rejected requests.
+    const status = error.statusCode && error.statusCode >= 500 ? 500 : 400;
+    // 4xx messages come from our own fixed strings (httpError); 5xx stay generic.
+    return res.status(status).json({ error: status === 500 ? 'Webhook processing failed' : error.message });
   }
 };
 

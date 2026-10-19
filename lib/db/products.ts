@@ -4,6 +4,19 @@ import { ObjectId } from 'mongodb';
 import { MOCK_PRODUCTS } from '@/lib/mockProducts';
 import { normalizeImageUrl } from '@/lib/utils';
 
+/**
+ * The built-in demo catalogue (lib/mockProducts.ts) exists for local development and tests only.
+ * In production the database is the single source of truth: a removed, hidden or repriced product
+ * must never reappear from static data, and a database outage must surface as an error instead
+ * of silently serving (and selling) stale demo products.
+ */
+export function demoCatalogAllowed(): boolean {
+  return process.env.NODE_ENV !== 'production';
+}
+
+/** Products are visible unless the owner explicitly hid them (absent flag = published). */
+export const PUBLISHED_FILTER = { isPublished: { $ne: false } } as const;
+
 export async function getProductsCollection() {
   await ensureIndexes();
   return await getCollection<DbProduct>('products');
@@ -31,7 +44,7 @@ export async function getProducts(options: ProductQueryOptions = {}) {
 
   try {
     const col = await getProductsCollection();
-    const mongoFilter: any = {};
+    const mongoFilter: any = { ...PUBLISHED_FILTER };
 
     // Preset Filters
     if (options.filter === 'new') mongoFilter.isNewArrival = true;
@@ -137,11 +150,18 @@ export async function getProducts(options: ProductQueryOptions = {}) {
         },
       };
     }
+    if (!demoCatalogAllowed()) {
+      return { products: [], pagination: { page, limit, total: 0, totalPages: 0 } };
+    }
   } catch (err) {
+    if (!demoCatalogAllowed()) {
+      console.error(JSON.stringify({ event: 'catalog.db_error', fn: 'getProducts', message: (err as Error)?.message }));
+      throw err;
+    }
     console.warn('⚠️ [MongoDB] getProducts fallback notice:', (err as Error)?.message || err);
   }
 
-  // Graceful fallback to MOCK_PRODUCTS when database is unreachable
+  // Development/test only: fall back to MOCK_PRODUCTS when the database is unreachable or empty
   let fallback = MOCK_PRODUCTS.map((m) => ({
     ...m,
     id: m.id || m.slug,
@@ -173,67 +193,109 @@ export async function getProducts(options: ProductQueryOptions = {}) {
   };
 }
 
+function shapeProduct(prod: any): DbProduct {
+  return { ...prod, id: prod._id?.toString() || prod.id || prod.slug, _id: prod._id?.toString() };
+}
+
+function demoProduct(idOrSlug: string): DbProduct | null {
+  const m = MOCK_PRODUCTS.find((p) => p.slug === idOrSlug || p.id === idOrSlug);
+  return m ? ({ ...m, id: m.id || m.slug, _id: m.id as any, isPublished: true, createdAt: new Date(), updatedAt: new Date() } as any) : null;
+}
+
+/** Storefront lookup by slug. Hidden products are not found. */
 export async function getProductBySlug(slug: string): Promise<DbProduct | null> {
-  if (!slug) return null;
+  if (!slug || typeof slug !== 'string') return null;
   try {
     const col = await getProductsCollection();
-    const prod = await col.findOne({ slug });
-    if (prod) {
-      return {
-        ...prod,
-        id: prod._id?.toString() || (prod as any).id || prod.slug,
-        _id: prod._id?.toString(),
-      };
+    const prod = await col.findOne({ slug, ...PUBLISHED_FILTER });
+    if (prod) return shapeProduct(prod);
+    return demoCatalogAllowed() ? demoProduct(slug) : null;
+  } catch (err) {
+    if (!demoCatalogAllowed()) {
+      console.error(JSON.stringify({ event: 'catalog.db_error', fn: 'getProductBySlug', message: (err as Error)?.message }));
+      throw err;
     }
-    return null;
-  } catch {
-    const m = MOCK_PRODUCTS.find((p) => p.slug === slug);
-    return m ? ({ ...m, id: m.id || m.slug, _id: m.id as any, isPublished: true, createdAt: new Date(), updatedAt: new Date() } as any) : null;
+    return demoProduct(slug);
   }
 }
 
+/** Storefront lookup by slug or id. Hidden products are not found; no name matching. */
 export async function getProductByIdOrSlug(idOrSlug: string): Promise<DbProduct | null> {
-  if (!idOrSlug) return null;
+  if (!idOrSlug || typeof idOrSlug !== 'string' || idOrSlug.length > 200) return null;
   try {
     const col = await getProductsCollection();
-
-    // Try slug first
-    let prod = await col.findOne({ slug: idOrSlug });
-    if (prod) {
-      return {
-        ...prod,
-        id: prod._id?.toString() || (prod as any).id || prod.slug,
-        _id: prod._id?.toString(),
-      };
+    let prod = await col.findOne({ slug: idOrSlug, ...PUBLISHED_FILTER });
+    if (!prod && ObjectId.isValid(idOrSlug) && idOrSlug.length === 24) {
+      prod = await col.findOne({ _id: new ObjectId(idOrSlug) as any, ...PUBLISHED_FILTER });
     }
-
-    // Try Mongo ObjectId
-    if (ObjectId.isValid(idOrSlug)) {
-      prod = await col.findOne({ _id: new ObjectId(idOrSlug) as any });
-      if (prod) {
-        return {
-          ...prod,
-          id: prod._id?.toString() || (prod as any).id || prod.slug,
-          _id: prod._id?.toString(),
-        };
-      }
+    if (prod) return shapeProduct(prod);
+    return demoCatalogAllowed() ? demoProduct(idOrSlug) : null;
+  } catch (err) {
+    if (!demoCatalogAllowed()) {
+      console.error(JSON.stringify({ event: 'catalog.db_error', fn: 'getProductByIdOrSlug', message: (err as Error)?.message }));
+      throw err;
     }
-
-    // Try name match
-    prod = await col.findOne({ name: { $regex: `^${idOrSlug}$`, $options: 'i' } });
-    if (prod) {
-      return {
-        ...prod,
-        id: prod._id?.toString() || (prod as any).id || prod.slug,
-        _id: prod._id?.toString(),
-      };
-    }
-  } catch {
-    // fallback
+    return demoProduct(idOrSlug);
   }
+}
 
-  const m = MOCK_PRODUCTS.find((p) => p.slug === idOrSlug || p.id === idOrSlug);
-  return m ? ({ ...m, id: m.id || m.slug, _id: m.id as any, isPublished: true, createdAt: new Date(), updatedAt: new Date() } as any) : null;
+/**
+ * Look up a product for checkout. Unlike getProductByIdOrSlug this never falls back to
+ * the static demo catalog and never matches by name: only products that really exist in
+ * the database, at their current database price, can be bought. A database outage
+ * throws (checkout fails) rather than silently selling at stale demo prices.
+ */
+export async function getPurchasableProduct(idOrSlug: unknown): Promise<DbProduct | null> {
+  if (typeof idOrSlug !== 'string' || !idOrSlug || idOrSlug.length > 200) return null;
+  const col = await getProductsCollection();
+  const prod =
+    (await col.findOne({ slug: idOrSlug })) ||
+    (ObjectId.isValid(idOrSlug) && idOrSlug.length === 24
+      ? await col.findOne({ _id: new ObjectId(idOrSlug) as any })
+      : null);
+  if (!prod) return null;
+  if (prod.isPublished === false) return null;
+  if (typeof prod.price !== 'number' || !Number.isFinite(prod.price) || prod.price <= 0) return null;
+  return { ...prod, id: prod._id?.toString() || prod.slug, _id: prod._id?.toString() };
+}
+
+/**
+ * Add or remove units atomically (the admin +/- buttons). Unlike setting an absolute number, this
+ * cannot overwrite a sale that happened while the owner was looking at the page. Never goes below 0.
+ * Returns the new stock, or null if the product does not exist or the change would go below 0.
+ */
+export async function adjustProductStock(idOrSlug: string, delta: number): Promise<number | null> {
+  if (!idOrSlug || !Number.isInteger(delta) || delta === 0) return null;
+  const col = await getProductsCollection();
+  const idFilters: any[] = [{ slug: idOrSlug }];
+  if (ObjectId.isValid(idOrSlug) && idOrSlug.length === 24) idFilters.push({ _id: new ObjectId(idOrSlug) });
+  const filter: any = { $or: idFilters };
+  if (delta < 0) filter.stock = { $gte: -delta };
+  const res = await col.findOneAndUpdate(
+    filter,
+    { $inc: { stock: delta }, $set: { updatedAt: new Date() } },
+    { returnDocument: 'after' }
+  );
+  if (!res) return null;
+  const isSoldOut = res.stock <= 0;
+  if (res.isSoldOut !== isSoldOut) await col.updateOne({ _id: res._id }, { $set: { isSoldOut } });
+  return res.stock;
+}
+
+/** Give stock back (order cancelled, or a multi-item COD order could not be fully reserved). */
+export async function incrementProductStock(idOrSlug: string, quantity: number): Promise<boolean> {
+  if (!idOrSlug || !(quantity > 0)) return false;
+  const col = await getProductsCollection();
+  const res = await col.updateOne(
+    {
+      $or: [
+        { slug: idOrSlug },
+        ...(ObjectId.isValid(idOrSlug) && idOrSlug.length === 24 ? [{ _id: new ObjectId(idOrSlug) }] : []),
+      ],
+    } as any,
+    { $inc: { stock: quantity }, $set: { isSoldOut: false, updatedAt: new Date() } }
+  );
+  return res.modifiedCount === 1;
 }
 
 export async function getAllProductsAdmin(): Promise<DbProduct[]> {
@@ -245,7 +307,9 @@ export async function getAllProductsAdmin(): Promise<DbProduct[]> {
       id: p._id?.toString() || (p as any).id || p.slug,
       _id: p._id?.toString(),
     }));
-  } catch {
+  } catch (err) {
+    // The owner must never edit stock/prices against demo data: fail loudly in production.
+    if (!demoCatalogAllowed()) throw err;
     return MOCK_PRODUCTS.map((m) => ({ ...m, id: m.id || m.slug, _id: m.id as any, isPublished: true, createdAt: new Date(), updatedAt: new Date() })) as any[];
   }
 }
@@ -254,18 +318,15 @@ export async function createProduct(productData: Omit<DbProduct, '_id' | 'create
   const col = await getProductsCollection();
   const now = new Date();
 
-  // Base slug generator if slug is missing
-  let slug = productData.slug;
-  if (!slug) {
-    slug = productData.name
-      .toLowerCase()
-      .trim()
-      .replace(/[^a-z0-9]+/g, '-')
-      .replace(/^-+|-+$/g, '');
-    const existing = await col.findOne({ slug });
-    if (existing) {
-      slug = `${slug}-${Math.random().toString(36).substring(2, 6)}`;
-    }
+  // Slugs are unique: a duplicate product name gets a short random suffix instead of failing.
+  const baseSlug = (productData.slug || productData.name)
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '') || 'product';
+  let slug = baseSlug;
+  while (await col.findOne({ slug }, { projection: { _id: 1 } })) {
+    slug = `${baseSlug}-${Math.random().toString(36).substring(2, 6)}`;
   }
 
   const rawImage = productData.image || '/catalog/dragon-ball/item-001.png';
@@ -280,6 +341,7 @@ export async function createProduct(productData: Omit<DbProduct, '_id' | 'create
     image: normalizedImage,
     images: normalizedImages,
     slug,
+    isPublished: productData.isPublished !== false,
     stock: Number(productData.stock) || 0,
     isSoldOut: (Number(productData.stock) || 0) <= 0,
     createdAt: now,

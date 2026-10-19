@@ -1,18 +1,28 @@
 import { NextRequest, NextResponse } from 'next/server';
 import crypto from 'crypto';
-import { getOrderByNumber, getOrderByRazorpayOrderId, updateOrderPayment, claimAndMarkOrderPaid } from '@/lib/db/orders';
-import { decrementProductStock } from '@/lib/db/products';
+import { markRazorpayPaymentFailed } from '@/lib/db/orders';
+import { confirmRazorpayPayment } from '@/lib/payments/confirm';
 
 export const dynamic = 'force-dynamic';
+
+const MAX_BODY_BYTES = 256 * 1024;
+
+function signatureMatches(rawBody: string, signature: string, secret: string): boolean {
+  const expected = crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  const a = Buffer.from(expected, 'utf-8');
+  const b = Buffer.from(signature, 'utf-8');
+  return a.length === b.length && crypto.timingSafeEqual(a, b);
+}
 
 export async function POST(request: NextRequest) {
   try {
     const rawBody = await request.text();
     const signature = request.headers.get('x-razorpay-signature');
 
-    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET || process.env.RAZORPAY_KEY_SECRET;
+    // Webhooks use a distinct secret configured in the Razorpay dashboard. Never fall
+    // back to the merchant API key secret, even when the deployment is misconfigured.
+    const webhookSecret = process.env.RAZORPAY_WEBHOOK_SECRET;
 
-    // 1. Mandatory cryptographic HMAC-SHA256 signature verification
     if (!signature) {
       console.error('❌ [Razorpay Webhook] Rejected: Missing x-razorpay-signature header');
       return NextResponse.json({ error: 'Missing x-razorpay-signature header' }, { status: 400 });
@@ -23,93 +33,49 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ error: 'Webhook configuration error' }, { status: 500 });
     }
 
-    const expectedSignature = crypto
-      .createHmac('sha256', webhookSecret)
-      .update(rawBody)
-      .digest('hex');
-
-    const isSignatureValid =
-      expectedSignature.length === signature.length &&
-      crypto.timingSafeEqual(Buffer.from(expectedSignature), Buffer.from(signature));
-
-    if (!isSignatureValid) {
+    if (Buffer.byteLength(rawBody, 'utf8') > MAX_BODY_BYTES || !signatureMatches(rawBody, signature, webhookSecret)) {
       console.error('❌ [Razorpay Webhook] Rejected: Cryptographic signature mismatch');
       return NextResponse.json({ error: 'Invalid webhook signature' }, { status: 400 });
     }
 
     const payload = JSON.parse(rawBody);
-    const event = payload.event;
-    console.log(`🔔 [Razorpay Webhook] Verified event received: ${event}`);
+    const event: string = payload.event;
+    const payment = payload.payload?.payment?.entity;
 
-    // 2. Handle successful payment events
+    // Orders are located ONLY by the gateway order id we stored at checkout.
+    // payment.notes are deliberately ignored: they are not proof of which order was paid.
     if (event === 'payment.captured' || event === 'order.paid') {
-      const paymentEntity = payload.payload?.payment?.entity;
-      const paymentId = paymentEntity?.id;
-      const razorpayOrderId = paymentEntity?.order_id;
-      const orderNumber = paymentEntity?.notes?.orderNumber;
-
-      let matchedOrder = null;
-      if (orderNumber) {
-        matchedOrder = await getOrderByNumber(orderNumber);
-      }
-      if (!matchedOrder && razorpayOrderId) {
-        matchedOrder = await getOrderByRazorpayOrderId(razorpayOrderId);
+      if (!payment?.id || !payment?.order_id || payment.status !== 'captured') {
+        console.warn(JSON.stringify({ event: 'webhook.ignored', reason: 'not a captured payment', webhookEvent: event }));
+        return NextResponse.json({ received: true });
       }
 
-      if (matchedOrder) {
-        // Idempotent Atomic CAS: only decrement stock if this thread flipped to PAID
-        const claimed = await claimAndMarkOrderPaid(matchedOrder.orderNumber, {
-          paymentId,
-          razorpayOrderId: razorpayOrderId || matchedOrder.payment?.razorpayOrderId || '',
-          razorpaySignature: signature,
-        });
-
-        if (claimed) {
-          // Decrement stock safely once
-          if (matchedOrder.items && matchedOrder.items.length > 0) {
-            for (const item of matchedOrder.items) {
-              const prodId = item.productId || item.slug;
-              if (prodId) {
-                try {
-                  await decrementProductStock(prodId, item.quantity);
-                } catch (stkErr) {
-                  console.warn(`Could not decrement stock for ${prodId}:`, stkErr);
-                }
-              }
-            }
-          }
-
-          console.log(`✅ [Razorpay Webhook] Order #${matchedOrder.orderNumber} successfully marked as PAID and stock decremented`);
-        } else {
-          console.log(`ℹ️ [Razorpay Webhook] Order #${matchedOrder.orderNumber} was already marked PAID. Skipped duplicate processing.`);
-        }
-      }
+      const result = await confirmRazorpayPayment({
+        razorpayOrderId: payment.order_id,
+        paymentId: payment.id,
+        amountPaise: Number(payment.amount),
+        currency: payment.currency,
+        source: 'webhook',
+      });
+      console.log(JSON.stringify({
+        event: 'webhook.processed',
+        webhookEvent: event,
+        paymentId: payment.id,
+        result: result.ok ? (result.alreadyProcessed ? 'duplicate' : 'paid') : result.code,
+      }));
     } else if (event === 'payment.failed') {
-      const paymentEntity = payload.payload?.payment?.entity;
-      const razorpayOrderId = paymentEntity?.order_id;
-      const orderNumber = paymentEntity?.notes?.orderNumber;
-
-      let matchedOrder = null;
-      if (orderNumber) {
-        matchedOrder = await getOrderByNumber(orderNumber);
-      }
-      if (!matchedOrder && razorpayOrderId) {
-        matchedOrder = await getOrderByRazorpayOrderId(razorpayOrderId);
-      }
-
-      if (matchedOrder && matchedOrder.payment?.paymentStatus !== 'PAID') {
-        await updateOrderPayment(matchedOrder.orderNumber, {
-          paymentStatus: 'FAILED',
-          paymentId: paymentEntity?.id,
-          razorpayOrderId,
-        });
-        console.log(`⚠️ [Razorpay Webhook] Order #${matchedOrder.orderNumber} marked as FAILED`);
+      if (payment?.order_id) {
+        const changed = await markRazorpayPaymentFailed(payment.order_id, payment.id);
+        console.log(JSON.stringify({ event: 'webhook.processed', webhookEvent: event, paymentId: payment.id, result: changed ? 'failed' : 'ignored' }));
       }
     }
 
+    // 200 for every authentic event we have recorded, so Razorpay does not retry.
+    // Anomalies are flagged on the order and logged for the owner instead.
     return NextResponse.json({ received: true });
-  } catch (err: any) {
+  } catch (err) {
+    // 5xx makes Razorpay retry, which is what we want for transient DB failures.
     console.error('Razorpay webhook processing error:', err);
-    return NextResponse.json({ error: err?.message || 'Webhook processing failed' }, { status: 500 });
+    return NextResponse.json({ error: 'Webhook processing failed' }, { status: 500 });
   }
 }

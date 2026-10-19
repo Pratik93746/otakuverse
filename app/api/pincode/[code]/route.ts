@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { rateLimit } from '@/lib/rate-limit';
 
 interface PincodeResult {
   valid: boolean;
@@ -12,11 +13,13 @@ interface PincodeResult {
 
 // Simple in-memory cache for fast lookups
 const pincodeCache = new Map<string, PincodeResult>();
+const PINCODE_CACHE_MAX = 2000;
 
 export async function GET(
   req: NextRequest,
   { params }: { params: Promise<{ code: string }> }
 ) {
+  { const rl = rateLimit(req, 'pincode', 30); if (!rl.ok) return NextResponse.json({ valid: false, message: 'Too many requests' }, { status: 429, headers: { 'Retry-After': String(rl.retryAfter) } }); }
   try {
     const { code } = await params;
     const cleanPin = (code || '').trim().replace(/\D/g, '');
@@ -70,6 +73,7 @@ export async function GET(
               message: `Verified: ${city}, ${state}`,
             };
 
+            if (pincodeCache.size >= PINCODE_CACHE_MAX) pincodeCache.clear();
             pincodeCache.set(cleanPin, result);
             return NextResponse.json(result);
           } else if (entry.Status === 'Error' || entry.PostOffice === null) {
@@ -94,7 +98,7 @@ export async function GET(
     };
     return NextResponse.json(fallbackResult);
   } catch (err: unknown) {
-    const errorMsg = err instanceof Error ? err.message : 'Pincode validation error';
-    return NextResponse.json({ valid: false, message: errorMsg }, { status: 500 });
+    console.error('Pincode validation error:', err);
+    return NextResponse.json({ valid: false, message: 'Pincode validation error' }, { status: 500 });
   }
 }

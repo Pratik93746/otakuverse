@@ -1,4 +1,5 @@
 import { getServerSession } from 'next-auth';
+import { authenticateAdminSession } from '@/lib/admin-auth';
 import { authOptions } from '@/lib/auth';
 import { getAllCarts } from '@/lib/db/carts';
 import { getAllUsers } from '@/lib/db/users';
@@ -13,7 +14,7 @@ import { MOCK_PRODUCTS } from '@/lib/mockProducts';
 export default async function AdminCartsPage() {
   const session = await getServerSession(authOptions);
 
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || !(await authenticateAdminSession())) {
     return <AdminAuthGate currentSession={session} callbackUrl="/admin/carts" pageTitle="Active Customer Carts" />;
   }
 

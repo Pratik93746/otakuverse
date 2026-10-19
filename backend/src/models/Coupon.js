@@ -42,6 +42,7 @@ const couponSchema = new mongoose.Schema(
       type: Number,
       default: null,
     },
+    oncePerCustomer: { type: Boolean, default: false },
     usedCount: {
       type: Number,
       default: 0,

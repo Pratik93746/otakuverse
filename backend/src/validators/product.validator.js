@@ -32,8 +32,9 @@ const validateProductBody = (req) => {
   if (!name || typeof name !== 'string' || !name.trim()) {
     return 'Product name is required and must be a string.';
   }
-  if (price === undefined || isNaN(Number(price)) || Number(price) < 0) {
-    return 'Product price is required and must be a non-negative number.';
+  if (name.length > 200) return 'Product name is too long.';
+  if (price === undefined || isNaN(Number(price)) || Number(price) <= 0 || Number(price) > 1000000) {
+    return 'Product price is required and must be between 0 and 1,000,000.';
   }
   if (stock !== undefined && (isNaN(parseInt(stock, 10)) || parseInt(stock, 10) < 0)) {
     return 'Stock must be a non-negative integer.';

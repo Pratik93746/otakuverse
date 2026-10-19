@@ -1,5 +1,7 @@
 import { getCollection, ensureIndexes } from '@/lib/mongodb';
-import { DbOrder, OrderStatus, PaymentStatus, OrderTracking } from './types';
+import { DbOrder, OrderStatus, PaymentStatus, OrderTracking, OrderReviewFlag } from './types';
+import { incrementProductStock } from './products';
+import { isStockHeld } from '@/lib/orders/lifecycle';
 
 export async function getOrdersCollection() {
   await ensureIndexes();
@@ -38,9 +40,29 @@ export async function getUserOrders(firebaseUid: string): Promise<DbOrder[]> {
   return await col.find({ firebaseUid }).sort({ createdAt: -1 }).toArray();
 }
 
-export async function getAllOrders(): Promise<DbOrder[]> {
+export async function getOrderByCustomerAndIdempotencyKey(
+  firebaseUid: string,
+  idempotencyKey: string
+): Promise<DbOrder | null> {
+  if (!firebaseUid || !idempotencyKey) return null;
   const col = await getOrdersCollection();
-  return await col.find({}).sort({ createdAt: -1 }).toArray();
+  return await col.findOne({ firebaseUid, idempotencyKey });
+}
+
+export async function getAllOrders(options?: { limit?: number; skip?: number; status?: string }): Promise<DbOrder[]> {
+  const col = await getOrdersCollection();
+  const filter: any = {};
+  if (options?.status) {
+    filter.orderStatus = options.status;
+  }
+  let cursor = col.find(filter).sort({ createdAt: -1 });
+  if (typeof options?.skip === 'number' && options.skip > 0) {
+    cursor = cursor.skip(options.skip);
+  }
+  if (typeof options?.limit === 'number' && options.limit > 0) {
+    cursor = cursor.limit(Math.min(100, options.limit));
+  }
+  return await cursor.toArray();
 }
 
 export async function updateOrderStatus(
@@ -117,37 +139,225 @@ export async function updateOrderPayment(
 }
 
 /**
- * Atomic Compare-And-Swap (CAS) to claim and mark an order as PAID.
- * Strictly guarantees single-execution semantics and eliminates race conditions.
- * Returns true ONLY for the first thread that successfully flipped the order from PENDING to PAID.
+ * Atomically move a Razorpay order from awaiting-payment to PAID.
+ *
+ * The filter is the whole safety check: the order must be bound to this exact
+ * gateway order id, be an online-payment order, still be PENDING (not cancelled,
+ * not shipped) and not already paid. Exactly one caller can win; everyone else
+ * gets null. Returns the order as it was before the update.
  */
 export async function claimAndMarkOrderPaid(
-  orderNumber: string,
-  paymentData: {
-    paymentId: string;
-    razorpayOrderId: string;
-    razorpaySignature?: string;
-  }
-): Promise<boolean> {
+  razorpayOrderId: string,
+  paymentData: { paymentId: string; razorpaySignature?: string | null; by: string }
+): Promise<DbOrder | null> {
+  if (!razorpayOrderId || !paymentData.paymentId) return null;
   const col = await getOrdersCollection();
   const now = new Date();
 
-  const res = await col.updateOne(
+  return await col.findOneAndUpdate(
     {
-      orderNumber,
-      'payment.paymentStatus': { $ne: 'PAID' },
+      'payment.razorpayOrderId': razorpayOrderId,
+      'payment.paymentMethod': 'RAZORPAY',
+      'payment.paymentStatus': { $in: ['PENDING', 'FAILED'] },
+      orderStatus: 'PENDING',
     },
     {
       $set: {
         'payment.paymentStatus': 'PAID',
         'payment.paymentId': paymentData.paymentId,
-        'payment.razorpayOrderId': paymentData.razorpayOrderId,
         'payment.razorpaySignature': paymentData.razorpaySignature || null,
         orderStatus: 'CONFIRMED',
+        paidAt: now,
         updatedAt: now,
       },
-    }
+      $push: {
+        statusHistory: { at: now, from: 'PENDING', to: 'CONFIRMED', by: paymentData.by, note: `payment ${paymentData.paymentId}` },
+      } as any,
+    },
+    { returnDocument: 'before' }
   );
+}
 
+/**
+ * Record a failed attempt on an order that is still awaiting payment.
+ * Never touches paid, cancelled or COD orders and never rewrites the gateway binding,
+ * so a failed attempt cannot block the customer's later successful retry.
+ */
+export async function markRazorpayPaymentFailed(razorpayOrderId: string, paymentId?: string): Promise<boolean> {
+  if (!razorpayOrderId) return false;
+  const col = await getOrdersCollection();
+  const res = await col.updateOne(
+    {
+      'payment.razorpayOrderId': razorpayOrderId,
+      'payment.paymentMethod': 'RAZORPAY',
+      'payment.paymentStatus': 'PENDING',
+      orderStatus: 'PENDING',
+    },
+    { $set: { 'payment.paymentStatus': 'FAILED', 'payment.lastFailedPaymentId': paymentId || null, updatedAt: new Date() } }
+  );
   return res.modifiedCount === 1;
+}
+
+/** Attach a problem flag the owner must look at. Idempotent per flag. */
+export async function flagOrderForReview(orderNumber: string, flag: OrderReviewFlag, detail?: string): Promise<void> {
+  const col = await getOrdersCollection();
+  await col.updateOne(
+    { orderNumber },
+    { $addToSet: { reviewFlags: flag } as any, $set: { updatedAt: new Date() } }
+  );
+  console.error(JSON.stringify({ event: 'order.review_flag', orderNumber, flag, detail: detail || null }));
+}
+
+/** Attach the Razorpay order id to an order that is still awaiting payment. */
+export async function bindRazorpayOrder(orderNumber: string, razorpayOrderId: string): Promise<boolean> {
+  const col = await getOrdersCollection();
+  const res = await col.updateOne(
+    { orderNumber, 'payment.paymentMethod': 'RAZORPAY', 'payment.razorpayOrderId': null, orderStatus: 'PENDING' },
+    { $set: { 'payment.razorpayOrderId': razorpayOrderId, updatedAt: new Date() } }
+  );
+  return res.modifiedCount === 1;
+}
+
+/**
+ * Give an order's stock back exactly once. Safe to call repeatedly or concurrently:
+ * the first caller claims it (stockRestoredAt), everyone else gets false.
+ */
+export async function restockOrderOnce(order: DbOrder): Promise<boolean> {
+  const col = await getOrdersCollection();
+  const claim = await col.updateOne(
+    { orderNumber: order.orderNumber, stockRestoredAt: null },
+    { $set: { stockRestoredAt: new Date(), stockHeld: false, updatedAt: new Date() } }
+  );
+  if (claim.modifiedCount !== 1) return false;
+  const failed: string[] = [];
+  for (const item of order.items || []) {
+    const id = item.productId || item.slug;
+    if (!id || !(await incrementProductStock(id, item.quantity))) failed.push(`${id} x${item.quantity}`);
+  }
+  if (failed.length) await flagOrderForReview(order.orderNumber, 'STOCK_RESTORE_FAILED', failed.join(', '));
+  return true;
+}
+
+/** Close an online order that never reached the gateway (no money taken); returns its stock. */
+export async function markOrderAbandoned(orderNumber: string, note: string): Promise<void> {
+  const col = await getOrdersCollection();
+  const now = new Date();
+  const before = await col.findOneAndUpdate(
+    { orderNumber, orderStatus: 'PENDING', 'payment.paymentStatus': { $ne: 'PAID' } },
+    {
+      $set: { orderStatus: 'CANCELLED', 'payment.paymentStatus': 'FAILED', couponOnceKey: null, updatedAt: now },
+      $push: { statusHistory: { at: now, from: 'PENDING', to: 'CANCELLED', by: 'system:checkout', note } } as any,
+    },
+    { returnDocument: 'before' }
+  );
+  if (before && isStockHeld(before)) await restockOrderOnce(before);
+}
+
+/**
+ * Cancel unpaid online orders whose reservation time ran out and return their stock.
+ * Runs opportunistically (checkout, admin pages) and from the cron route. Idempotent and bounded.
+ * A payment that arrives after this point is flagged for refund, never silently fulfilled.
+ */
+export async function releaseExpiredReservations(limit = 50): Promise<number> {
+  const col = await getOrdersCollection();
+  const now = new Date();
+  const expired = await col
+    .find({
+      orderStatus: 'PENDING',
+      'payment.paymentMethod': 'RAZORPAY',
+      'payment.paymentStatus': { $in: ['PENDING', 'FAILED'] },
+      stockHeld: true,
+      reservationExpiresAt: { $lt: now },
+    })
+    .limit(limit)
+    .toArray();
+  let released = 0;
+  for (const o of expired) {
+    const before = await col.findOneAndUpdate(
+      { orderNumber: o.orderNumber, orderStatus: 'PENDING', 'payment.paymentStatus': { $in: ['PENDING', 'FAILED'] } },
+      {
+        $set: { orderStatus: 'CANCELLED', 'payment.paymentStatus': 'FAILED', couponOnceKey: null, updatedAt: now },
+        $push: { statusHistory: { at: now, from: 'PENDING', to: 'CANCELLED', by: 'system:expiry', note: 'payment not completed in time' } } as any,
+      },
+      { returnDocument: 'before' }
+    );
+    if (before) {
+      await restockOrderOnce(before);
+      released++;
+      console.log(JSON.stringify({ event: 'order.reservation_expired', orderNumber: o.orderNumber }));
+    }
+  }
+  return released;
+}
+
+export async function countOpenCodOrders(firebaseUid: string): Promise<number> {
+  const col = await getOrdersCollection();
+  return await col.countDocuments({
+    firebaseUid,
+    'payment.paymentMethod': 'COD',
+    orderStatus: { $in: ['CONFIRMED', 'PROCESSING', 'SHIPPED'] },
+  });
+}
+
+/** Unpaid online orders currently holding stock for this customer. */
+export async function countPendingOnlineOrders(firebaseUid: string): Promise<number> {
+  const col = await getOrdersCollection();
+  return await col.countDocuments({
+    firebaseUid,
+    'payment.paymentMethod': 'RAZORPAY',
+    orderStatus: 'PENDING',
+    stockHeld: true,
+  });
+}
+
+/** True if the customer already has a live (not cancelled/failed) order using this coupon. */
+export async function hasUsedCoupon(firebaseUid: string, couponCode: string): Promise<boolean> {
+  const col = await getOrdersCollection();
+  const n = await col.countDocuments({
+    firebaseUid,
+    orderStatus: { $ne: 'CANCELLED' },
+    $or: [
+      { couponCode, 'payment.paymentStatus': { $ne: 'FAILED' } },
+      { couponOnceKey: couponCode },
+    ],
+  });
+  return n > 0;
+}
+
+export async function setStockHeld(orderNumber: string, held: boolean): Promise<void> {
+  const col = await getOrdersCollection();
+  await col.updateOne({ orderNumber }, { $set: { stockHeld: held, updatedAt: new Date() } });
+}
+
+/**
+ * Move an order from an expected status to a new one. Compare-and-set: if another request (or
+ * another admin tab) already changed the status, nothing is written and null is returned.
+ */
+export async function transitionOrderStatus(
+  orderNumber: string,
+  from: OrderStatus,
+  to: OrderStatus,
+  by: string,
+  extra: { tracking?: OrderTracking; note?: string; markPaid?: boolean } = {}
+): Promise<DbOrder | null> {
+  const col = await getOrdersCollection();
+  const now = new Date();
+  const set: Record<string, unknown> = { orderStatus: to, updatedAt: now };
+  if (to === 'CANCELLED') set.couponOnceKey = null;
+  // Cash on delivery: the cash is collected at the door, so delivered = paid.
+  if (extra.markPaid) { set['payment.paymentStatus'] = 'PAID'; set.paidAt = now; }
+  if (extra.tracking) {
+    if (extra.tracking.carrier !== undefined) set['tracking.carrier'] = extra.tracking.carrier;
+    if (extra.tracking.trackingNumber !== undefined) set['tracking.trackingNumber'] = extra.tracking.trackingNumber;
+    if (extra.tracking.trackingUrl !== undefined) set['tracking.trackingUrl'] = extra.tracking.trackingUrl;
+    if (to === 'SHIPPED') set['tracking.shippedAt'] = now;
+  }
+  return await col.findOneAndUpdate(
+    { orderNumber, orderStatus: from },
+    {
+      $set: set,
+      $push: { statusHistory: { at: now, from, to, by, ...(extra.note ? { note: extra.note } : {}) } } as any,
+    },
+    { returnDocument: 'after' }
+  );
 }

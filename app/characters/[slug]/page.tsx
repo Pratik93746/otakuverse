@@ -5,6 +5,9 @@ import { ProductCard } from '@/components/ProductCard/ProductCard';
 import { User, ShoppingBag } from 'lucide-react';
 import { getProducts } from '@/lib/db/products';
 
+// Re-read prices, stock and visibility from the database at most once a minute.
+export const revalidate = 60;
+
 interface Props {
   params: Promise<{ slug: string }> | { slug: string };
 }

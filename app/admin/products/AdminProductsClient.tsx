@@ -35,6 +35,8 @@ export interface AdminProductItem {
   brandName?: string | null;
   categoryName?: string | null;
   stock: number;
+  /** false = hidden from the store. Missing = visible. */
+  isPublished?: boolean;
   isNewArrival?: boolean;
   isBestSeller?: boolean;
   isLimitedEdition?: boolean;
@@ -327,7 +329,7 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
 
   // Handle Delete (any product)
   const handleDeleteProduct = async (prod: AdminProductItem) => {
-    if (!confirm(`Are you sure you want to remove "${prod.name}" from the store catalog?`)) return;
+    if (!confirm(`Permanently delete "${prod.name}"?\n\nThis cannot be undone. If you only want to stop selling it for now, press Cancel and use "Hide" instead.`)) return;
 
     try {
       const targetId = prod.id || prod.slug;
@@ -343,74 +345,85 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
     }
   };
 
-  // Handle Stock Quantity Update (+ / -)
-  const handleUpdateStock = async (prod: AdminProductItem, delta: number) => {
-    const newStock = Math.max(0, prod.stock + delta);
-    setProducts((prev) =>
-      prev.map((p) => (p.id === prod.id ? { ...p, stock: newStock } : p))
-    );
+  // Products whose save is in flight: their buttons are disabled so a double click cannot repeat a change.
+  const [busyIds, setBusyIds] = useState<Set<string>>(new Set());
+  const keyOf = (prod: AdminProductItem) => prod.id || prod.slug;
 
+  /** Send one change to the server. The screen is only updated from the server's answer. */
+  const saveProduct = async (prod: AdminProductItem, payload: Record<string, unknown>): Promise<any | null> => {
+    const key = keyOf(prod);
+    if (busyIds.has(key)) return null;
+    setBusyIds((prev) => new Set(prev).add(key));
     try {
       const res = await fetchWithAuth('/api/admin/products', {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: prod.id || prod.slug, stock: newStock }),
+        body: JSON.stringify({ id: key, ...payload }),
       });
-      if (!res.ok) throw new Error();
-      toast.success(`Stock updated: ${newStock} units`);
+      const data = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        toast.error(data?.error || 'Could not save. Nothing was changed — please try again.');
+        return null;
+      }
+      return data;
     } catch {
-      toast.error('Failed to update stock quantity');
+      toast.error('Could not reach the server. Nothing was changed — check your internet and try again.');
+      return null;
+    } finally {
+      setBusyIds((prev) => {
+        const next = new Set(prev);
+        next.delete(key);
+        return next;
+      });
     }
+  };
+
+  // Handle Stock Quantity Update (+ / -): applied on the server relative to the live stock
+  const handleUpdateStock = async (prod: AdminProductItem, delta: number) => {
+    const data = await saveProduct(prod, { stockDelta: delta });
+    if (!data) return;
+    setProducts((prev) => prev.map((p) => (p.id === prod.id ? { ...p, stock: data.stock } : p)));
+    toast.success(`Stock is now ${data.stock} units`);
   };
 
   // Handle Setting Stock Quantity Directly
   const handleSetStockDirectly = async (prod: AdminProductItem, targetStock: number) => {
-    const newStock = Math.max(0, targetStock);
-    setProducts((prev) =>
-      prev.map((p) => (p.id === prod.id ? { ...p, stock: newStock } : p))
-    );
-
-    try {
-      const res = await fetchWithAuth('/api/admin/products', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ id: prod.id || prod.slug, stock: newStock }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success(`Stock quantity set to ${newStock} units`);
-    } catch {
-      toast.error('Failed to update stock quantity');
-    }
+    const data = await saveProduct(prod, { stock: targetStock });
+    if (!data) return;
+    const saved = data.product?.stock ?? data.stock ?? targetStock;
+    setProducts((prev) => prev.map((p) => (p.id === prod.id ? { ...p, stock: saved } : p)));
+    toast.success(`Stock quantity set to ${saved} units`);
   };
 
   // Handle Setting Selling Price Directly (Admin Authority)
   const handleSetPriceDirectly = async (prod: AdminProductItem, newPrice: number, newCompareAt?: number) => {
-    const price = Math.max(0, newPrice);
-    const compareAtPrice = newCompareAt !== undefined && newCompareAt > 0 ? newCompareAt : null;
-    const discount = compareAtPrice && compareAtPrice > price ? Math.round(((compareAtPrice - price) / compareAtPrice) * 100) : 0;
-
+    const data = await saveProduct(prod, { price: newPrice, compareAtPrice: newCompareAt ?? null });
+    if (!data) return;
+    const saved = data.product || {};
     setProducts((prev) =>
-      prev.map((p) => (p.id === prod.id ? { ...p, price, compareAtPrice, discount } : p))
+      prev.map((p) =>
+        p.id === prod.id
+          ? { ...p, price: saved.price ?? newPrice, compareAtPrice: saved.compareAtPrice ?? null, discount: saved.discount ?? 0 }
+          : p
+      )
     );
-
-    try {
-      const res = await fetchWithAuth('/api/admin/products', {
-        method: 'PATCH',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          id: prod.id || prod.slug,
-          price,
-          compareAtPrice,
-          discount,
-        }),
-      });
-      if (!res.ok) throw new Error();
-      toast.success(`Price updated to ₹${price.toLocaleString('en-IN')}`);
-    } catch {
-      toast.error('Failed to update product price');
-    }
+    toast.success(`Price updated to ₹${Number(saved.price ?? newPrice).toLocaleString('en-IN')}`);
   };
 
+  // Hide a product from the store without deleting it (or show it again)
+  const handleTogglePublished = async (prod: AdminProductItem) => {
+    const nextPublished = prod.isPublished === false;
+    if (
+      !nextPublished &&
+      !confirm(`Hide "${prod.name}" from the store?\n\nCustomers will no longer see it or be able to buy it. You can show it again any time.`)
+    ) {
+      return;
+    }
+    const data = await saveProduct(prod, { isPublished: nextPublished });
+    if (!data) return;
+    setProducts((prev) => prev.map((p) => (p.id === prod.id ? { ...p, isPublished: nextPublished } : p)));
+    toast.success(nextPublished ? `"${prod.name}" is now visible in the store` : `"${prod.name}" is now hidden from the store`);
+  };
 
   // Filtering
   const filteredProducts = useMemo(() => {
@@ -686,6 +699,11 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
                           <div className="min-w-0 max-w-sm">
                             <p className="font-semibold text-gray-900 leading-snug truncate">
                               {product.name}
+                              {product.isPublished === false && (
+                                <span className="ml-2 px-1.5 py-0.5 text-[9px] font-bold uppercase rounded-xs bg-gray-200 text-gray-700 border border-gray-300 align-middle">
+                                  Hidden from store
+                                </span>
+                              )}
                             </p>
                             <p className="text-[10px] text-gray-400 font-mono">
                               SKU: {product.sku || product.id}
@@ -722,8 +740,10 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
                                 `Enter new selling price (₹) for "${product.name}":`,
                                 String(product.price)
                               );
-                              if (input !== null && input.trim() !== '' && !isNaN(Number(input))) {
-                                const newPrice = Math.max(0, parseFloat(input));
+                              if (input !== null && (input.trim() === '' || !(Number(input) > 0))) {
+                                toast.error('Please type a price above zero, such as 1499. Nothing was changed.');
+                              } else if (input !== null) {
+                                const newPrice = parseFloat(input);
                                 const comparePrompt = prompt(
                                   `Enter compare-at / MRP price (₹) (or leave blank if none):`,
                                   product.compareAtPrice ? String(product.compareAtPrice) : ''
@@ -760,7 +780,7 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
                         <div className="flex items-center gap-1.5">
                           <button
                             onClick={() => handleUpdateStock(product, -1)}
-                            disabled={product.stock <= 0}
+                            disabled={product.stock <= 0 || busyIds.has(keyOf(product))}
                             className="w-6 h-6 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 rounded font-bold transition-colors disabled:opacity-30 disabled:cursor-not-allowed cursor-pointer"
                             title="Decrease Quantity (-1)"
                           >
@@ -779,6 +799,7 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
                           </span>
                           <button
                             onClick={() => handleUpdateStock(product, +1)}
+                            disabled={busyIds.has(keyOf(product))}
                             className="w-6 h-6 flex items-center justify-center bg-gray-100 hover:bg-gray-200 text-gray-700 rounded font-bold transition-colors cursor-pointer"
                             title="Add Quantity (+1)"
                           >
@@ -787,9 +808,12 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
                           <button
                             onClick={() => {
                               const input = prompt(`Enter new stock quantity for "${product.name}":`, String(product.stock));
-                              if (input !== null && !isNaN(Number(input))) {
-                                handleSetStockDirectly(product, parseInt(input, 10));
+                              if (input === null) return;
+                              if (!/^\d{1,6}$/.test(input.trim())) {
+                                toast.error('Please type a whole number such as 12. Nothing was changed.');
+                                return;
                               }
+                              handleSetStockDirectly(product, parseInt(input.trim(), 10));
                             }}
                             className="text-[10px] text-gray-400 hover:text-brand-red ml-1 underline cursor-pointer"
                             title="Set custom stock quantity"
@@ -843,6 +867,14 @@ export function AdminProductsClient({ initialProducts }: { initialProducts: Admi
                           >
                             <ExternalLink className="w-3.5 h-3.5" />
                           </Link>
+                          <button
+                            onClick={() => handleTogglePublished(product)}
+                            disabled={busyIds.has(keyOf(product))}
+                            className="px-2 py-1 text-[11px] font-bold text-gray-600 border border-gray-200 rounded-sm hover:border-gray-500 hover:bg-gray-50 transition-colors cursor-pointer disabled:opacity-40"
+                            title={product.isPublished === false ? 'Show this product in the store again' : 'Hide this product from the store (you can show it again later)'}
+                          >
+                            {product.isPublished === false ? 'Show' : 'Hide'}
+                          </button>
                           <button
                             onClick={() => handleDeleteProduct(product)}
                             className="p-1.5 text-gray-400 hover:text-red-600 border border-gray-200 rounded-sm hover:border-red-600 hover:bg-red-50 transition-colors cursor-pointer"
