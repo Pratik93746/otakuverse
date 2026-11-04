@@ -128,6 +128,21 @@ const orderSchema = new mongoose.Schema(
       default: null,
       index: true,
     },
+    paymentMethod: {
+      type: String,
+      enum: ['RAZORPAY', 'COD'],
+      default: 'RAZORPAY',
+    },
+    couponCode: { type: String, default: null },
+    // Set only for once-per-customer coupons; a unique index makes the claim atomic.
+    couponOnceKey: { type: String, default: null },
+    // Stock is reserved when the order is created and returned exactly once if it is cancelled/expires.
+    stockHeld: { type: Boolean, default: false },
+    stockRestoredAt: { type: Date, default: null },
+    reservationExpiresAt: { type: Date, default: null },
+    // Problems the owner must look at (paid but out of stock, amount mismatch, ...)
+    needsReview: { type: Boolean, default: false },
+    reviewNote: { type: String, default: '' },
     razorpayOrderId: {
       type: String,
       default: null,
@@ -152,6 +167,8 @@ const orderSchema = new mongoose.Schema(
 
 orderSchema.index({ userId: 1, createdAt: -1 });
 orderSchema.index({ createdAt: -1 });
+orderSchema.index({ userId: 1, couponOnceKey: 1 }, { unique: true, partialFilterExpression: { couponOnceKey: { $type: 'string' } } });
+orderSchema.index({ orderStatus: 1, stockHeld: 1, reservationExpiresAt: 1 });
 
 const Order = mongoose.model('Order', orderSchema);
 

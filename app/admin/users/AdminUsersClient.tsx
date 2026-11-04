@@ -19,6 +19,7 @@ import {
 import toast from 'react-hot-toast';
 import { auth } from '@/lib/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
+import { fetchWithAuth } from '@/lib/api-client';
 
 export interface AdminUserItem {
   uid: string;
@@ -57,13 +58,12 @@ export function AdminUsersClient({ initialUsers }: { initialUsers: AdminUserItem
               name: fbUser.displayName || userEmail.split('@')[0],
               email: fbUser.email!,
               phone: fbUser.phoneNumber || '',
-              role: userEmail === 'gojo@baka.style' || userEmail === 'admin@baka.style' ? 'ADMIN' : 'USER',
+              role: 'ADMIN',
               createdAt: new Date().toISOString(),
             };
-            // Persist to backend
-            fetch('/api/admin/users', {
+            // Persist to backend with auth
+            fetchWithAuth('/api/admin/users', {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify(newUser),
             }).catch(() => {});
             return [newUser, ...prev];

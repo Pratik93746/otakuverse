@@ -1,7 +1,8 @@
 const sanitizeString = (val) => {
   if (typeof val !== 'string') return '';
-  // Strip dangerous mongodb operator characters if input starts with $
-  return val.replace(/^\$/, '').trim();
+  // Strip dangerous mongodb operator characters, trim, cap to 100 chars, and escape regex special characters to prevent ReDoS
+  const clean = val.replace(/^\$/, '').trim().slice(0, 100);
+  return clean.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 };
 
 const validateProductQuery = (req) => {
@@ -31,8 +32,9 @@ const validateProductBody = (req) => {
   if (!name || typeof name !== 'string' || !name.trim()) {
     return 'Product name is required and must be a string.';
   }
-  if (price === undefined || isNaN(Number(price)) || Number(price) < 0) {
-    return 'Product price is required and must be a non-negative number.';
+  if (name.length > 200) return 'Product name is too long.';
+  if (price === undefined || isNaN(Number(price)) || Number(price) <= 0 || Number(price) > 1000000) {
+    return 'Product price is required and must be between 0 and 1,000,000.';
   }
   if (stock !== undefined && (isNaN(parseInt(stock, 10)) || parseInt(stock, 10) < 0)) {
     return 'Stock must be a non-negative integer.';

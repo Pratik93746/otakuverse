@@ -45,7 +45,20 @@ const paymentLimiter = rateLimit({
   },
 });
 
+// Admin API: generous for a dashboard, but caps a stolen token or a runaway script
+const adminLimiter = rateLimit({
+  windowMs: 15 * 60 * 1000,
+  max: 600,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    success: false,
+    error: { code: 'ADMIN_RATE_LIMIT_EXCEEDED', message: 'Too many admin requests, please slow down.' },
+  },
+});
+
 module.exports = {
+  adminLimiter,
   globalLimiter,
   authLimiter,
   paymentLimiter,

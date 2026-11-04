@@ -30,6 +30,8 @@ export interface DbProduct {
   categorySlug?: string;
   stock: number;
   isSoldOut?: boolean;
+  /** false = hidden from the storefront and not purchasable. Absent = published. */
+  isPublished?: boolean;
   isNewArrival?: boolean;
   isBestSeller?: boolean;
   isLimitedEdition?: boolean;
@@ -109,6 +111,19 @@ export interface OrderPayment {
   amount: number;
   currency: string;
   createdAt: Date;
+  refund?: OrderRefund | null;
+  lastFailedPaymentId?: string | null;
+}
+
+export interface OrderRefund {
+  status: 'INITIATED' | 'PROCESSED' | 'FAILED';
+  amount: number;
+  razorpayRefundId?: string | null;
+  initiatedBy: string;
+  initiatedAt: Date;
+  /** Short lease so two clicks / two admins cannot start two refunds at once. */
+  lockedUntil?: Date | null;
+  error?: string | null;
 }
 
 export interface OrderTracking {
@@ -130,13 +145,46 @@ export interface DbOrder {
   tax: number;
   discount: number;
   total: number;
+  /** Set only for once-per-customer coupons. A unique index (firebaseUid + this) makes the claim atomic; cleared when the order is cancelled. */
+  couponOnceKey?: string | null;
   couponCode?: string | null;
   deliveryMethod: string;
   orderStatus: OrderStatus;
   payment: OrderPayment;
   tracking?: OrderTracking;
+  /** Problems the owner must resolve by hand (e.g. paid but out of stock). */
+  reviewFlags?: OrderReviewFlag[];
+  /** Append-only log of status changes and who made them. */
+  statusHistory?: OrderStatusEvent[];
+  /** True while this order's stock is deducted from the product (reserved or sold). */
+  stockHeld?: boolean;
+  /** Unpaid online orders give their stock back automatically after this time. */
+  reservationExpiresAt?: Date | null;
+  /** Set once stock for a cancelled order has been returned, so it is never returned twice. */
+  stockRestoredAt?: Date | null;
+  paidAt?: Date | null;
+  /** Client or network retry idempotency token. */
+  idempotencyKey?: string | null;
   createdAt: Date;
   updatedAt: Date;
+}
+
+export type OrderReviewFlag =
+  | 'OUT_OF_STOCK_AFTER_PAYMENT'
+  | 'AMOUNT_MISMATCH'
+  | 'PAID_AFTER_CANCELLATION'
+  | 'DUPLICATE_PAYMENT'
+  | 'REFUND_REQUIRED'
+  | 'STOCK_RESTORE_FAILED'
+  | 'RESERVATION_EXPIRED_PAYMENT';
+
+export interface OrderStatusEvent {
+  at: Date;
+  from: OrderStatus | null;
+  to: OrderStatus;
+  /** 'system:webhook', 'system:verify', 'system:checkout' or the admin's email. */
+  by: string;
+  note?: string;
 }
 
 export interface DbAddress {

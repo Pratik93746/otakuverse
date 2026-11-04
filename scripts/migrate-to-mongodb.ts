@@ -25,7 +25,15 @@ import { MOCK_PRODUCTS } from '../lib/mockProducts';
 import { DbProduct, DbOrder, DbUser } from '../lib/db/types';
 
 async function runMigration() {
-  console.log('🚀 [Migration] Starting MongoDB Atlas data migration...\n');
+  const isDryRun = process.argv.includes('--dry-run');
+  const isForceProd = process.argv.includes('--force-production-migration');
+
+  if (process.env.NODE_ENV === 'production' && !isForceProd && !isDryRun) {
+    console.error('⛔ [Migration Guard] Refusing to run live migration on production database without --force-production-migration or --dry-run.');
+    process.exit(1);
+  }
+
+  console.log(`🚀 [Migration] Starting MongoDB data migration...${isDryRun ? ' (DRY-RUN MODE)' : ''}\n`);
 
   const { getDatabase, ensureIndexes, getMongoClient } = await import('../lib/mongodb');
   await ensureIndexes();
@@ -39,7 +47,7 @@ async function runMigration() {
   };
 
   // ============================================================
-  // 1. MIGRATE USERS
+  // 1. MIGRATE USERS (NEVER auto-promote to ADMIN)
   // ============================================================
   console.log('📦 [1/3] Migrating Users...');
   const usersPath = path.join(process.cwd(), 'lib', 'custom-users.json');
@@ -51,26 +59,24 @@ async function runMigration() {
       for (const u of rawUsers) {
         const cleanEmail = (u.email || '').toLowerCase().trim();
         const firebaseUid = u.uid || `usr_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`;
-        const isAdmin =
-          cleanEmail === 'gojo@otakuverse.com' ||
-          cleanEmail === 'admin@otakuverse.in' ||
-          u.role === 'ADMIN';
 
         const userDoc: DbUser = {
           firebaseUid,
           name: u.name || cleanEmail.split('@')[0],
           email: cleanEmail,
           phone: u.phone || '',
-          role: isAdmin ? 'ADMIN' : 'USER',
+          role: 'USER', // Security: Migrations must NEVER mint administrators
           createdAt: u.createdAt ? new Date(u.createdAt) : new Date(),
           updatedAt: u.updatedAt ? new Date(u.updatedAt) : new Date(),
         };
 
-        await usersCol.updateOne(
-          { $or: [{ firebaseUid }, { email: cleanEmail }] },
-          { $set: userDoc },
-          { upsert: true }
-        );
+        if (!isDryRun) {
+          await usersCol.updateOne(
+            { $or: [{ firebaseUid }, { email: cleanEmail }] },
+            { $setOnInsert: userDoc },
+            { upsert: true }
+          );
+        }
         report.usersMigrated++;
       }
       console.log(`✅ Migrated ${report.usersMigrated} users.`);
@@ -147,11 +153,13 @@ async function runMigration() {
         updatedAt: now,
       };
 
-      await productsCol.updateOne(
-        { slug },
-        { $set: productDoc },
-        { upsert: true }
-      );
+      if (!isDryRun) {
+        await productsCol.updateOne(
+          { slug },
+          { $setOnInsert: productDoc },
+          { upsert: true }
+        );
+      }
       report.productsMigrated++;
     }
     console.log(`✅ Migrated ${report.productsMigrated} products.`);
@@ -226,11 +234,13 @@ async function runMigration() {
           updatedAt: o.updatedAt ? new Date(o.updatedAt) : new Date(),
         };
 
-        await ordersCol.updateOne(
-          { orderNumber },
-          { $set: orderDoc },
-          { upsert: true }
-        );
+        if (!isDryRun) {
+          await ordersCol.updateOne(
+            { orderNumber },
+            { $setOnInsert: orderDoc },
+            { upsert: true }
+          );
+        }
         report.ordersMigrated++;
       }
       console.log(`✅ Migrated ${report.ordersMigrated} orders.`);

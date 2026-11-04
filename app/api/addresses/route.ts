@@ -1,11 +1,41 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { requireFirebaseUser, handleAuthError } from '@/lib/firebase-admin';
 import { getUserAddresses, saveAddress, deleteAddress } from '@/lib/db/addresses';
+import { getServerSession } from 'next-auth';
+import { authOptions } from '@/lib/auth';
+
+async function resolveUser(request: NextRequest): Promise<{ uid: string; email?: string } | null> {
+  const authHeader = request.headers.get('authorization') || request.headers.get('Authorization');
+  if (authHeader && authHeader.startsWith('Bearer ')) {
+    try {
+      const fbUser = await requireFirebaseUser(request);
+      if (fbUser?.uid) return { uid: fbUser.uid, email: fbUser.email };
+    } catch {
+      // fallback to NextAuth session
+    }
+  }
+
+  try {
+    const session = await getServerSession(authOptions);
+    if (session?.user) {
+      const uid = (session.user as any).firebaseUid || (session.user as any).id || session.user.email || '';
+      if (uid) return { uid, email: session.user.email || undefined };
+    }
+  } catch {
+    // ignore
+  }
+
+  return null;
+}
 
 export async function GET(request: NextRequest) {
   try {
-    const verifiedUser = await requireFirebaseUser(request);
-    const addresses = await getUserAddresses(verifiedUser.uid);
+    const user = await resolveUser(request);
+    if (!user?.uid) {
+      return NextResponse.json({ error: 'Unauthorized: Sign in required' }, { status: 401 });
+    }
+
+    const addresses = await getUserAddresses(user.uid);
 
     return NextResponse.json({
       addresses: addresses.map((a) => ({
@@ -32,8 +62,15 @@ export async function GET(request: NextRequest) {
 
 export async function POST(request: NextRequest) {
   try {
-    const verifiedUser = await requireFirebaseUser(request);
-    const body = await request.json();
+    const user = await resolveUser(request);
+    if (!user?.uid) {
+      return NextResponse.json({ error: 'Unauthorized: Sign in required' }, { status: 401 });
+    }
+
+    const body = await request.json().catch(() => null);
+    if (!body || typeof body !== 'object') {
+      return NextResponse.json({ error: 'Invalid request' }, { status: 400 });
+    }
 
     const {
       fullName,
@@ -60,6 +97,11 @@ export async function POST(request: NextRequest) {
     const finalState = state;
     const finalPin = pinCode || pincode;
     const finalCountry = country || 'India';
+
+    const textFields = [finalName, finalPhone, finalLine1, finalLine2, finalCity, finalState, finalPin, finalCountry];
+    if (textFields.some((v) => typeof v !== 'string' || v.length > 200) || (id !== undefined && typeof id !== 'string')) {
+      return NextResponse.json({ error: 'Address fields must be text of reasonable length' }, { status: 400 });
+    }
 
     if (!finalName || !finalPhone || !finalLine1 || !finalCity || !finalState || !finalPin) {
       return NextResponse.json(
@@ -89,8 +131,18 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    if (!id) {
+      const existing = await getUserAddresses(user.uid);
+      if (existing.length >= 15) {
+        return NextResponse.json(
+          { error: 'Maximum 15 saved addresses allowed per account. Please remove an old address.' },
+          { status: 400 }
+        );
+      }
+    }
+
     const saved = await saveAddress(
-      verifiedUser.uid,
+      user.uid,
       {
         fullName: finalName.trim(),
         phone: finalPhone.trim(),
@@ -131,7 +183,11 @@ export async function POST(request: NextRequest) {
 
 export async function DELETE(request: NextRequest) {
   try {
-    const verifiedUser = await requireFirebaseUser(request);
+    const user = await resolveUser(request);
+    if (!user?.uid) {
+      return NextResponse.json({ error: 'Unauthorized: Sign in required' }, { status: 401 });
+    }
+
     const { searchParams } = new URL(request.url);
     const addressId = searchParams.get('id');
 
@@ -139,7 +195,7 @@ export async function DELETE(request: NextRequest) {
       return NextResponse.json({ error: 'Address ID is required' }, { status: 400 });
     }
 
-    const deleted = await deleteAddress(addressId, verifiedUser.uid);
+    const deleted = await deleteAddress(addressId, user.uid);
     if (!deleted) {
       return NextResponse.json({ error: 'Address not found or unauthorized' }, { status: 404 });
     }

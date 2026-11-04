@@ -4,6 +4,7 @@ const env = require('./env');
 let isShuttingDown = false;
 
 const connectDatabase = async () => {
+  isShuttingDown = false;
   const mongoUri = env.MONGODB_URI;
 
   if (!mongoUri) {
@@ -22,33 +23,43 @@ const connectDatabase = async () => {
     autoIndex: env.NODE_ENV !== 'production',
   };
 
-  try {
-    const conn = await mongoose.connect(mongoUri, connectionOptions);
-    console.log(`✅ [MongoDB Atlas] Connected successfully: ${conn.connection.host}/${conn.connection.name}`);
+  let attempts = 0;
+  const maxAttempts = 3;
 
-    mongoose.connection.on('error', (err) => {
-      console.error(`❌ [MongoDB Atlas] Runtime connection error: ${err.message}`);
-    });
+  while (attempts < maxAttempts) {
+    try {
+      attempts++;
+      const conn = await mongoose.connect(mongoUri, connectionOptions);
+      console.log(`✅ [MongoDB Atlas] Connected successfully: ${conn.connection.host}/${conn.connection.name}`);
 
-    mongoose.connection.on('disconnected', () => {
-      if (!isShuttingDown && env.NODE_ENV !== 'production') {
-        console.debug('⚠️ [MongoDB Atlas] Idle connection cycle.');
+      mongoose.connection.on('error', (err) => {
+        console.error(`❌ [MongoDB Atlas] Runtime connection error: ${err.message}`);
+      });
+
+      mongoose.connection.on('disconnected', () => {
+        if (!isShuttingDown && env.NODE_ENV !== 'production') {
+          console.debug('⚠️ [MongoDB Atlas] Idle connection cycle.');
+        }
+      });
+
+      mongoose.connection.on('reconnected', () => {
+        if (!isShuttingDown && env.NODE_ENV !== 'production') {
+          console.debug('✅ [MongoDB Atlas] Connection refreshed.');
+        }
+      });
+
+      return conn;
+    } catch (error) {
+      console.warn(`⚠️ [MongoDB Atlas] Connection attempt ${attempts}/${maxAttempts} failed: ${error.message}`);
+      if (attempts >= maxAttempts) {
+        console.error(`❌ [MongoDB Atlas] Fatal connection failure after ${maxAttempts} attempts: ${error.message}`);
+        if (env.NODE_ENV === 'production') {
+          process.exit(1);
+        }
+        return null;
       }
-    });
-
-    mongoose.connection.on('reconnected', () => {
-      if (!isShuttingDown && env.NODE_ENV !== 'production') {
-        console.debug('✅ [MongoDB Atlas] Connection refreshed.');
-      }
-    });
-
-    return conn;
-  } catch (error) {
-    console.error(`❌ [MongoDB Atlas] Fatal connection failure: ${error.message}`);
-    if (env.NODE_ENV === 'production') {
-      process.exit(1);
+      await new Promise((r) => setTimeout(r, 1000 * attempts));
     }
-    return null;
   }
 };
 

@@ -103,6 +103,10 @@ export const isValidLocation = (line1: string, city: string): boolean => {
   return (line1 || '').trim().length >= 5 && (city || '').trim().length >= 2;
 };
 
+function generateCheckoutKey(): string {
+  return `chk_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+}
+
 export default function CheckoutPage() {
   const [mounted, setMounted] = useState(false);
   const { data: session, status } = useSession();
@@ -146,9 +150,11 @@ export default function CheckoutPage() {
   const [couponCode, setCouponCode] = useState('');
   const [discount, setDiscount] = useState(0);
   const [couponLoading, setCouponLoading] = useState(false);
+  const [checkoutIdempotencyKey, setCheckoutIdempotencyKey] = useState('');
 
   useEffect(() => {
     setMounted(true);
+    setCheckoutIdempotencyKey(generateCheckoutKey());
   }, []);
 
   const subtotal = mounted ? getSubtotal() : 0;
@@ -417,7 +423,11 @@ export default function CheckoutPage() {
     try {
       const res = await fetchWithAuth('/api/orders', {
         method: 'POST',
+        headers: {
+          'Idempotency-Key': checkoutIdempotencyKey,
+        },
         body: JSON.stringify({
+          idempotencyKey: checkoutIdempotencyKey,
           items: items.map((i) => ({
             productId: i.productId,
             name: i.name,
@@ -448,6 +458,7 @@ export default function CheckoutPage() {
         clearCart();
         setOrderId(data.orderNumber);
         setStep(4);
+        setCheckoutIdempotencyKey(generateCheckoutKey());
         setLoading(false);
       } else if (paymentMethod === 'razorpay') {
         if (!data.razorpayOrderId) {
@@ -458,6 +469,7 @@ export default function CheckoutPage() {
         clearCart();
         setOrderId(data.orderNumber);
         setStep(4);
+        setCheckoutIdempotencyKey(generateCheckoutKey());
         setLoading(false);
       }
     } catch (err: any) {
@@ -470,11 +482,12 @@ export default function CheckoutPage() {
     razorpayOrderId: string;
     orderNumber: string;
     razorpayKeyId?: string;
+    total?: number;
   }) => {
     const launchModal = () => {
       const options = {
         key: orderData.razorpayKeyId || process.env.NEXT_PUBLIC_RAZORPAY_KEY_ID || '',
-        amount: Math.round(total * 100),
+        amount: Math.round((orderData.total ?? total) * 100),
         currency: 'INR',
         name: 'BAKA STYLE',
         description: `Anime Figures Order #${orderData.orderNumber}`,
@@ -496,30 +509,51 @@ export default function CheckoutPage() {
           razorpay_order_id: string;
           razorpay_signature: string;
         }) => {
-          try {
-            const verifyRes = await fetchWithAuth('/api/verify-payment', {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({
-                order_id: response.razorpay_order_id,
-                payment_id: response.razorpay_payment_id,
-                razorpay_signature: response.razorpay_signature,
-                orderNumber: orderData.orderNumber,
-              }),
-            });
-            const verifyData = await verifyRes.json();
+          // Money has been taken at this point. Never leave the customer thinking they must pay again:
+          // retry the confirmation a few times; if it still cannot be confirmed, the server-side webhook
+          // completes the order and we send the customer to their confirmation page.
+          const confirmPayment = async () => {
+            const delays = [0, 2000, 5000, 10000];
+            for (const wait of delays) {
+              if (wait) await new Promise((r) => setTimeout(r, wait));
+              try {
+                const verifyRes = await fetchWithAuth('/api/verify-payment', {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({
+                    order_id: response.razorpay_order_id,
+                    payment_id: response.razorpay_payment_id,
+                    razorpay_signature: response.razorpay_signature,
+                    orderNumber: orderData.orderNumber,
+                  }),
+                });
+                const verifyData = await verifyRes.json().catch(() => ({}));
+                if (verifyRes.ok && verifyData.success) return 'confirmed' as const;
+                if (verifyRes.status >= 400 && verifyRes.status < 500 && verifyRes.status !== 429) {
+                  return { rejected: verifyData.error as string | undefined };
+                }
+              } catch {
+                // network problem: retry
+              }
+            }
+            return 'pending' as const;
+          };
 
-            if (verifyRes.ok && verifyData.success) {
+          try {
+            const outcome = await confirmPayment();
+            if (outcome === 'confirmed') {
               clearCart();
               setOrderId(orderData.orderNumber);
               setStep(4);
               toast.success('Payment verified successfully! Order placed.', { icon: '🎉' });
+            } else if (outcome === 'pending') {
+              clearCart();
+              setOrderId(orderData.orderNumber);
+              setStep(4);
+              toast('Payment received — we are confirming it with the bank. Please do NOT pay again. Your order will appear in My Orders shortly.', { icon: '⏳', duration: 12000 });
             } else {
-              toast.error(verifyData.error || 'Payment signature mismatch. Please contact support.');
+              toast.error(outcome.rejected || 'We could not confirm this payment. If money was deducted, it will be refunded automatically. Please contact support.', { duration: 10000 });
             }
-          } catch (err: any) {
-            console.error('Verification error:', err);
-            toast.error('Payment verification request failed. Please check your network.');
           } finally {
             setLoading(false);
           }

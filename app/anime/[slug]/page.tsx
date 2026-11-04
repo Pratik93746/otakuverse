@@ -6,6 +6,9 @@ import { ArrowLeft, Sparkles, Filter, ShoppingBag } from 'lucide-react';
 import { ANIME_FRANCHISES } from '@/lib/mockProducts';
 import { getProducts } from '@/lib/db/products';
 
+// Re-read prices, stock and visibility from the database at most once a minute.
+export const revalidate = 60;
+
 interface Props {
   params: Promise<{ slug: string }> | { slug: string };
 }

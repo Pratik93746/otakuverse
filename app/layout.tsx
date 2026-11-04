@@ -29,6 +29,7 @@ const bebasNeue = Bebas_Neue({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || 'https://bakastyle.in'),
   title: {
     default: 'BAKA STYLE — Clothing Style And More | Anime Figures, Katanas & Streetwear',
     template: '%s | BAKA STYLE',

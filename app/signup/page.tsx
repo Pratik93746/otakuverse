@@ -52,12 +52,14 @@ export default function SignupPage() {
     setLoading(true);
     try {
       let firebaseUid: string | undefined = undefined;
+      let idToken: string | undefined = undefined;
 
       // Register with Firebase if configured
       if (isFirebaseConfigured) {
         try {
           const userCredential = await signUpWithFirebaseEmail(email, password, name);
           firebaseUid = userCredential.user?.uid;
+          idToken = await userCredential.user?.getIdToken();
         } catch (fbErr: any) {
           console.warn('Firebase registration notice:', fbErr.message);
         }
@@ -69,6 +71,7 @@ export default function SignupPage() {
         name,
         authType: firebaseUid ? 'firebase' : undefined,
         firebaseUid,
+        idToken,
         redirect: false,
       });
 
@@ -104,11 +107,13 @@ export default function SignupPage() {
       const fbUser = result.user;
 
       if (fbUser && fbUser.email) {
+        const idToken = await fbUser.getIdToken();
         const res = await signIn('credentials', {
           email: fbUser.email,
           name: fbUser.displayName || name || fbUser.email.split('@')[0],
           authType: 'firebase',
           firebaseUid: fbUser.uid,
+          idToken,
           redirect: false,
         });
 

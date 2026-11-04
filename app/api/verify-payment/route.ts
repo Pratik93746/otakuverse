@@ -1,88 +1,80 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { verifyPaymentSignature } from '@/lib/razorpay';
-import { updateOrderPayment, getOrderByNumber, getOrderByRazorpayOrderId } from '@/lib/db/orders';
-import { decrementProductStock } from '@/lib/db/products';
+import { confirmRazorpayPayment } from '@/lib/payments/confirm';
+
+const str = (v: unknown, max = 128): string | null =>
+  typeof v === 'string' && v.length > 0 && v.length <= max ? v : null;
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json().catch(() => ({}));
-    
-    // Support both standard Razorpay naming and camelCase/underscore naming
-    const order_id = body.order_id || body.razorpay_order_id;
-    const payment_id = body.payment_id || body.razorpay_payment_id;
-    const signature = body.razorpay_signature || body.signature;
-    const orderNumber = body.orderNumber;
 
-    // Validate presence of required verification fields
-    if (!order_id || !payment_id || !signature) {
+    // Support both standard Razorpay naming and camelCase/underscore naming
+    const order_id = str(body.order_id ?? body.razorpay_order_id);
+    const payment_id = str(body.payment_id ?? body.razorpay_payment_id);
+    const signature = str(body.razorpay_signature ?? body.signature);
+    const orderNumber = body.orderNumber === undefined ? undefined : str(body.orderNumber, 64);
+
+    if (!order_id || !payment_id || !signature || orderNumber === null) {
       return NextResponse.json(
-        {
-          error: 'Missing required fields: order_id, payment_id, and razorpay_signature are required',
-        },
+        { error: 'Missing required fields: order_id, payment_id, and razorpay_signature are required' },
         { status: 400 }
       );
     }
 
-    // Verify HMAC-SHA256 signature
-    const isValid = verifyPaymentSignature({
-      orderId: order_id,
-      paymentId: payment_id,
-      signature: signature,
-    });
-
-    if (!isValid) {
+    // HMAC-SHA256(order_id|payment_id) proves Razorpay authorised this payment for this
+    // gateway order. The gateway order's amount was fixed server-side at checkout.
+    if (!verifyPaymentSignature({ orderId: order_id, paymentId: payment_id, signature })) {
       return NextResponse.json(
         { success: false, error: 'Signature verification failed: Invalid signature' },
         { status: 400 }
       );
     }
 
-    // If linked to an order in MongoDB, update the order payment status to PAID and reduce stock
-    try {
-      if (orderNumber) {
-        await updateOrderPayment(orderNumber, {
-          paymentStatus: 'PAID',
-          paymentId: payment_id,
-          razorpayOrderId: order_id,
-          razorpaySignature: signature,
-        });
-      }
+    const result = await confirmRazorpayPayment({
+      razorpayOrderId: order_id,
+      paymentId: payment_id,
+      signature,
+      expectedOrderNumber: orderNumber,
+      source: 'verify',
+    });
 
-      // Decrement stock for each item in the paid order
-      const order = orderNumber 
-        ? await getOrderByNumber(orderNumber)
-        : await getOrderByRazorpayOrderId(order_id);
-
-      if (order && order.items && order.items.length > 0) {
-        for (const item of order.items) {
-          const prodId = item.productId || item.slug;
-          if (prodId) {
-            try {
-              await decrementProductStock(prodId, item.quantity);
-            } catch (stkErr) {
-              console.warn(`Could not decrement stock for item ${prodId}:`, stkErr);
-            }
-          }
-        }
-      }
-    } catch (dbErr) {
-      console.warn('Failed to update DB order or decrement stock during payment verification:', dbErr);
+    if (result.ok) {
+      return NextResponse.json(
+        { success: true, message: 'Payment signature verified successfully', payment_id, order_id, orderNumber: result.order.orderNumber },
+        { status: 200 }
+      );
     }
 
+    if (result.code === 'ORDER_NOT_FOUND') {
+      return NextResponse.json(
+        { success: false, error: 'No order found matching the verified payment gateway transaction.' },
+        { status: 404 }
+      );
+    }
+    if (result.code === 'ORDER_MISMATCH') {
+      return NextResponse.json(
+        { success: false, error: 'Security violation: Order correspondence mismatch.' },
+        { status: 400 }
+      );
+    }
+    if (result.code === 'PROVIDER_UNAVAILABLE' || result.code === 'NOT_CAPTURED') {
+      // Money may have been taken. The Razorpay webhook will finish the order independently.
+      return NextResponse.json(
+        {
+          success: false,
+          pending: true,
+          error: 'We are still confirming your payment with the bank. Please do not pay again — your order will update shortly.',
+        },
+        { status: 503 }
+      );
+    }
     return NextResponse.json(
-      {
-        success: true,
-        message: 'Payment signature verified successfully',
-        payment_id,
-        order_id,
-      },
-      { status: 200 }
+      { success: false, error: 'This order can no longer be paid. If you were charged, our team will refund you — please contact support.' },
+      { status: 409 }
     );
-  } catch (error: any) {
+  } catch (error) {
     console.error('Payment verification error:', error);
-    return NextResponse.json(
-      { error: error?.message || 'Server error during payment verification' },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: 'Server error during payment verification' }, { status: 500 });
   }
 }

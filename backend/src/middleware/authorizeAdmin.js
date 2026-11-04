@@ -6,21 +6,22 @@ const authorizeAdmin = async (req, res, next) => {
     return errorResponse(res, 'Unauthorized: Admin verification requires prior authentication.', 401, 'AUTH_REQUIRED');
   }
 
-  // 1. Direct custom claims check
+  // 1. Direct custom claims check (cryptographically signed)
   if (req.user.role === 'ADMIN' || req.user.admin === true) {
     return next();
   }
 
-  // 2. Verified admin email check from server config
-  if (req.user.email && env.ADMIN_EMAILS.includes(req.user.email.toLowerCase().trim())) {
+  // 2. Verified admin email check from server config (STRICTLY requires email_verified: true)
+  const isEmailVerified = req.user.decodedToken && req.user.decodedToken.email_verified === true;
+  if (isEmailVerified && req.user.email && Array.isArray(env.ADMIN_EMAILS) && env.ADMIN_EMAILS.includes(req.user.email.toLowerCase().trim())) {
     return next();
   }
 
-  // 3. Database user role verification
+  // 3. Database user role verification (bound to verified authProviderId)
   try {
     const User = require('../models/User');
     const dbUser = await User.findOne({
-      $or: [{ authProviderId: req.user.uid }, { email: req.user.email }],
+      authProviderId: req.user.uid,
     }).lean();
 
     if (dbUser && dbUser.role === 'ADMIN' && dbUser.isActive !== false) {

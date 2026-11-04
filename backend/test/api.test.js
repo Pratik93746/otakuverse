@@ -3,7 +3,10 @@ const assert = require('assert');
 let serverInstance = null;
 let BASE_URL = process.env.API_BASE_URL || 'http://localhost:5001';
 
+let mongod = null;
+
 async function ensureServerRunning() {
+  process.env.NODE_ENV = 'test';
   try {
     const res = await fetch(`${BASE_URL}/health`, { signal: AbortSignal.timeout(1000) });
     if (res.ok) {
@@ -11,6 +14,12 @@ async function ensureServerRunning() {
     }
   } catch {
     // Server is not running, launch in-process for tests
+  }
+
+  if (!process.env.MONGODB_URI && !process.env.MONGO_URI) {
+    const { MongoMemoryServer } = require('mongodb-memory-server');
+    mongod = await MongoMemoryServer.create();
+    process.env.MONGODB_URI = mongod.getUri();
   }
 
   const app = require('../src/app');
@@ -45,6 +54,36 @@ async function runTests() {
   }
 
   try {
+    const Product = require('../src/models/Product');
+    const Category = require('../src/models/Category');
+
+    await Product.updateOne(
+      { slug: 'all-star-anime-vault' },
+      {
+        $setOnInsert: {
+          name: 'All Star Anime Vault',
+          slug: 'all-star-anime-vault',
+          price: 2999,
+          stock: 10,
+          category: 'Action Figures',
+          isActive: true,
+        },
+      },
+      { upsert: true }
+    );
+
+    await Category.updateOne(
+      { slug: 'action-figures' },
+      {
+        $setOnInsert: {
+          name: 'Action Figures',
+          slug: 'action-figures',
+          isActive: true,
+        },
+      },
+      { upsert: true }
+    );
+
     // 1. Health Endpoint
     await test('GET /health returns { status: "ok" }', async () => {
       const res = await fetch(`${BASE_URL}/health`);
@@ -155,6 +194,9 @@ async function runTests() {
       const { disconnectDatabase } = require('../src/config/database');
       await new Promise((resolve) => serverInstance.close(resolve));
       await disconnectDatabase();
+    }
+    if (mongod) {
+      await mongod.stop();
     }
   }
 

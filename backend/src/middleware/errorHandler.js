@@ -11,7 +11,7 @@ const errorHandler = (err, req, res, next) => {
     success: false,
     error: {
       code,
-      message: err.message || 'Internal Server Error',
+      message: statusCode >= 500 && env.NODE_ENV === 'production' ? 'Internal Server Error' : err.message || 'Internal Server Error',
     },
   };
 

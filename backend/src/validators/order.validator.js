@@ -5,14 +5,17 @@ const validateOrderCreate = (req) => {
     return 'Order creation requires a non-empty items array.';
   }
 
+  if (items.length > 30) {
+    return 'Too many items in one order.';
+  }
+
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
-    if (!item.productId) {
-      return `Item at index ${i} is missing productId.`;
+    if (!item || typeof item.productId !== 'string' || !item.productId) {
+      return `Item at index ${i} is missing a valid productId.`;
     }
-    const qty = parseInt(item.quantity, 10);
-    if (isNaN(qty) || qty < 1) {
-      return `Item at index ${i} has an invalid quantity. Must be at least 1.`;
+    if (!Number.isInteger(item.quantity) || item.quantity < 1 || item.quantity > 20) {
+      return `Item at index ${i} has an invalid quantity. Must be a whole number from 1 to 20.`;
     }
   }
 
@@ -21,12 +24,15 @@ const validateOrderCreate = (req) => {
   }
 
   const { fullName, phone, addressLine1, city, state, pinCode } = shippingAddress;
+  for (const v of [fullName, phone, addressLine1, shippingAddress.addressLine2, city, state, pinCode, shippingAddress.country]) {
+    if (v !== undefined && (typeof v !== 'string' || v.length > 200)) return 'Shipping address fields must be text of reasonable length.';
+  }
 
   if (!fullName || typeof fullName !== 'string' || !fullName.trim()) {
     return 'Shipping address fullName is required.';
   }
 
-  const cleanPhone = (phone || '').trim().replace(/\D/g, '');
+  const cleanPhone = (typeof phone === 'string' ? phone : '').trim().replace(/\D/g, '');
   if (!/^[6-9]\d{9}$/.test(cleanPhone)) {
     return 'A valid 10-digit Indian mobile number starting with 6, 7, 8, or 9 is required.';
   }
@@ -43,9 +49,18 @@ const validateOrderCreate = (req) => {
     return 'Shipping address state is required.';
   }
 
-  const cleanPin = (pinCode || '').trim().replace(/\D/g, '');
+  const cleanPin = (typeof pinCode === 'string' ? pinCode : '').trim().replace(/\D/g, '');
   if (!/^[1-9]\d{5}$/.test(cleanPin)) {
     return 'A valid 6-digit Indian postal PIN code is required.';
+  }
+
+  // Reject untrusted client discount parameters
+  if (req.body.discount !== undefined && Number(req.body.discount) > 0) {
+    return 'Arbitrary client discount values are not permitted. Please provide a valid couponCode instead.';
+  }
+
+  if (req.body.couponCode && (typeof req.body.couponCode !== 'string' || req.body.couponCode.trim().length > 32)) {
+    return 'couponCode must be a valid string up to 32 characters.';
   }
 
   return null;

@@ -97,12 +97,16 @@ export async function requireFirebaseUser(request: NextRequest): Promise<Verifie
 }
 
 /**
- * Check if an email is in the allowed admin list
+ * Check if an email is in the allowed admin list.
+ * CRITICAL: email must be explicitly verified by the identity provider.
  */
-export function isAllowedAdminEmail(email?: string | null): boolean {
-  if (!email) return false;
+export function isAllowedAdminEmail(email?: string | null, emailVerified?: boolean): boolean {
+  if (!email || !emailVerified) return false;
   const clean = email.toLowerCase().trim();
-  const configuredAdmins = (process.env.ADMIN_EMAILS || 'gojo@otakuverse.com,admin@otakuverse.in,admin@baka.style,gojo@baka.style')
+  const rawAdmins = process.env.ADMIN_EMAILS;
+  if (!rawAdmins) return false;
+
+  const configuredAdmins = rawAdmins
     .toLowerCase()
     .split(',')
     .map((e) => e.trim())
@@ -112,22 +116,24 @@ export function isAllowedAdminEmail(email?: string | null): boolean {
 }
 
 /**
- * Reusable server authorization helper to verify Admin status on protected routes
+ * Reusable server authorization helper to verify Admin status on protected routes.
+ * Strictly verifies cryptographic custom claims, verified email whitelist, or verified DB role.
  */
 export async function requireAdminUser(request: NextRequest): Promise<VerifiedFirebaseUser> {
   const user = await requireFirebaseUser(request);
 
-  // 1. Custom claims check
-  if (user.admin === true || user.role === 'ADMIN') {
+  // 1. Cryptographic custom claims check (tamper-proof)
+  if (user.decodedToken.admin === true || user.decodedToken.role === 'ADMIN' || user.admin === true || user.role === 'ADMIN') {
     return user;
   }
 
-  // 2. Verified admin email check
-  if (isAllowedAdminEmail(user.email)) {
+  // 2. Email whitelist check — MUST be verified by identity provider
+  const isEmailVerified = !!user.decodedToken.email_verified;
+  if (isEmailVerified && isAllowedAdminEmail(user.email, isEmailVerified)) {
     return user;
   }
 
-  // 3. MongoDB user role check
+  // 3. MongoDB user role check bound to verified UID
   try {
     const { findUserByFirebaseUid } = await import('@/lib/db/users');
     const dbUser = await findUserByFirebaseUid(user.uid);
@@ -138,7 +144,7 @@ export async function requireAdminUser(request: NextRequest): Promise<VerifiedFi
     console.warn('⚠️ [Firebase Admin] Error checking dbUser role:', dbErr);
   }
 
-  throw new AuthError('Forbidden: Admin access required', 403);
+  throw new AuthError('Forbidden: Verified administrative access required', 403);
 }
 
 /**

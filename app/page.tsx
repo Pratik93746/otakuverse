@@ -10,6 +10,9 @@ import {
 } from '@/components/Home';
 import { ProductCardSkeleton } from '@/components/ProductCard/ProductCardSkeleton';
 
+// Re-read prices, stock and visibility from the database at most once a minute.
+export const revalidate = 60;
+
 export default function HomePage() {
   return (
     <div>

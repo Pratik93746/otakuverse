@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { requireFirebaseUser, isAllowedAdminEmail, handleAuthError } from '@/lib/firebase-admin';
+import { requireFirebaseUser, handleAuthError } from '@/lib/firebase-admin';
+import { authenticateAdmin } from '@/lib/admin-auth';
 import { getOrderByNumber } from '@/lib/db/orders';
 
 export async function GET(
@@ -15,14 +16,20 @@ export async function GET(
       return NextResponse.json({ error: 'Order not found' }, { status: 404 });
     }
 
-    const isAdmin =
-      verifiedUser.admin === true ||
-      verifiedUser.role === 'ADMIN' ||
-      isAllowedAdminEmail(verifiedUser.email);
+    // Customers may only read their own orders. Admin status is decided by the same
+    // verified checks as every other admin endpoint (verified email / DB role / claim).
+    const isOwner = order.firebaseUid === verifiedUser.uid;
+    const isAdmin = !isOwner && (await authenticateAdmin(request)) !== null;
+    if (!isOwner && !isAdmin) {
+      // Same answer as "not found" so order numbers cannot be probed.
+      return NextResponse.json({ error: 'Order not found' }, { status: 404 });
+    }
 
-    // Ensure customer can only view their own order unless admin
-    if (order.firebaseUid !== verifiedUser.uid && !isAdmin) {
-      return NextResponse.json({ error: 'Forbidden: Access denied' }, { status: 403 });
+    if (isOwner) {
+      // Customers never need gateway internals or internal review notes.
+      const { payment, reviewFlags: _flags, statusHistory: _history, ...rest } = order as any;
+      const { razorpaySignature: _sig, refund: _refund, ...safePayment } = payment || {};
+      return NextResponse.json({ order: { ...rest, payment: safePayment } });
     }
 
     return NextResponse.json({ order });

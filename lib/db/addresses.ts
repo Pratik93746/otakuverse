@@ -37,7 +37,10 @@ export async function saveAddress(
     await col.updateMany({ firebaseUid }, { $set: { isDefault: false } });
   }
 
-  if (addressId && ObjectId.isValid(addressId)) {
+  if (addressId) {
+    if (!ObjectId.isValid(addressId)) {
+      throw new Error('Invalid address ID');
+    }
     const updateData: Partial<DbAddress> = {
       fullName: address.fullName,
       phone: address.phone,
@@ -51,13 +54,14 @@ export async function saveAddress(
       updatedAt: now,
     };
 
-    await col.updateOne(
+    const updated = await col.findOneAndUpdate(
       { _id: new ObjectId(addressId) as any, firebaseUid },
-      { $set: updateData }
+      { $set: updateData },
+      { returnDocument: 'after' }
     );
 
-    const updated = await col.findOne({ _id: new ObjectId(addressId) as any });
-    if (updated) return updated;
+    if (updated) return updated as DbAddress;
+    throw new Error('Address not found or unauthorized');
   }
 
   const newAddress: DbAddress = {

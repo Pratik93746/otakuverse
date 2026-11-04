@@ -1,4 +1,5 @@
 import { getServerSession } from 'next-auth';
+import { authenticateAdminSession } from '@/lib/admin-auth';
 import { authOptions } from '@/lib/auth';
 import { getAllUsers } from '@/lib/db/users';
 import { getAllOrders } from '@/lib/db/orders';
@@ -9,7 +10,7 @@ import { AdminAuthGate } from '@/components/Admin/AdminAuthGate';
 export default async function AdminUsersPage() {
   const session = await getServerSession(authOptions);
 
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || !(await authenticateAdminSession())) {
     return <AdminAuthGate currentSession={session} callbackUrl="/admin/users" pageTitle="Registered Collectors Directory" />;
   }
 
@@ -21,7 +22,7 @@ export default async function AdminUsersPage() {
   }
 
   // Also extract customer profiles from orders if any
-  let orderCustomers: any[] = [];
+  const orderCustomers: any[] = [];
   try {
     const orders = await getAllOrders();
     orders.forEach((o) => {

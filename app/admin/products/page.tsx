@@ -1,4 +1,5 @@
 import { getServerSession } from 'next-auth';
+import { authenticateAdminSession } from '@/lib/admin-auth';
 import { authOptions } from '@/lib/auth';
 import { getAllProductsAdmin } from '@/lib/db/products';
 import { AdminProductsClient, AdminProductItem } from './AdminProductsClient';
@@ -7,7 +8,7 @@ import { AdminAuthGate } from '@/components/Admin/AdminAuthGate';
 export default async function AdminProductsPage() {
   const session = await getServerSession(authOptions);
 
-  if (!session?.user || session.user.role !== 'ADMIN') {
+  if (!session?.user || !(await authenticateAdminSession())) {
     return <AdminAuthGate currentSession={session} callbackUrl="/admin/products" pageTitle="Figure & Inventory Management" />;
   }
 
